@@ -14,13 +14,13 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "presentation" / "colab_bundle.zip"
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "case_study_1" / "presentation" / "colab_bundle.zip"
 
 INCLUDE_TREES = ["src", "configs", "tests"]
 INCLUDE_GLOBS = [
     "data/processed/design_solar_g12.parquet",      # the main design matrix
-    "results/*.csv",                                # aggregate tables, small
+    "case_study_1/results/*.csv",                                # aggregate tables, small
 ]
 # The four per-country matrices for the transfer study add 15 MB and 58 seconds
 # of refitting. The notebook reads that result from results/e5_transfer_mean.csv
@@ -52,7 +52,7 @@ def main(with_transfer: bool = False) -> None:
         print(f"   {tree:<10} {n:>3} files")
     n = sum(1 for f in set(files) if str(f.relative_to(ROOT)).startswith("data"))
     print(f"   {'data':<10} {n:>3} files (cached design matrices, no raw download needed)")
-    n = sum(1 for f in set(files) if str(f.relative_to(ROOT)).startswith("results"))
+    n = sum(1 for f in set(files) if str(f.relative_to(ROOT)).startswith("case_study_1/results"))
     print(f"   {'results':<10} {n:>3} files (aggregate tables)")
 
 

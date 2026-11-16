@@ -1,0 +1,58 @@
+{
+  // Cmd+Shift+P -> "Tasks: Run Task" -> pick one of these.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup: install Python environment",
+      "type": "shell",
+      "command": "make setup",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: run all",
+      "type": "shell",
+      "command": "make test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Thesis: build German market data",
+      "type": "shell",
+      "command": "make data-de",
+      "problemMatcher": []
+    },
+    {
+      "label": "Case Study 1: build data (OPSD)",
+      "type": "shell",
+      "command": "make data",
+      "problemMatcher": []
+    },
+    {
+      "label": "Case Study 1: run experiment",
+      "type": "shell",
+      "command": "make cs1-${input:experiment}",
+      "problemMatcher": []
+    },
+    {
+      "label": "Case Study 1: run everything (~45 min)",
+      "type": "shell",
+      "command": "make cs1-all",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "experiment",
+      "type": "pickString",
+      "description": "Which Case Study 1 experiment?",
+      "options": [
+        { "label": "e1  probabilistic forecasting", "value": "e1" },
+        { "label": "e2  risk-aware dispatch", "value": "e2" },
+        { "label": "e3  concept drift and retraining", "value": "e3" },
+        { "label": "e4  explainability", "value": "e4" },
+        { "label": "e5  transfer to a new site", "value": "e5" }
+      ],
+      "default": "e2"
+    }
+  ]
+}

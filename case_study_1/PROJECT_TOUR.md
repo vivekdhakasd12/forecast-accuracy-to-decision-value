@@ -1,3 +1,5 @@
+> Paths in this tour are relative to `case_study_1/`, except `src/`, `tests/`, `configs/` and `data/`, which sit at the repository root.
+
 # Where everything is
 
 A map of the repository, in the order you would explain it.
@@ -13,7 +15,7 @@ A map of the repository, in the order you would explain it.
 | `figures/` | Generated. 19 figures, written by the experiments |
 | `results/` | Generated. Score tables and per-day costs as CSV |
 | `data/` | Downloaded and cached. Rebuilt by `make data` |
-| `docs/report/` | The report: LaTeX source, the PDF, and the diagram script |
+| `report/` | The report: LaTeX source, the PDF, and the diagram script |
 | `presentation/` | Deck, speaker script, demo video and its build scripts |
 
 ## Inside the library

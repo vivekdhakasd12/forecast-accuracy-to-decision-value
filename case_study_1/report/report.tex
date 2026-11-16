@@ -110,7 +110,7 @@
 \begin{titlepage}
 \thispagestyle{empty}
 \centering
-\includegraphics[width=4.2cm]{../assets/srh_logo.jpg}
+\includegraphics[width=4.2cm]{assets/srh_logo.jpg}
 \vspace{1.6cm}
 
 {\color{srhorange}\rule{\linewidth}{1.2pt}}
@@ -245,7 +245,7 @@ The operational setting is the European day-ahead arrangement. At 12:00 UTC on d
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/day_ahead_protocol.pdf}
+\includegraphics[width=\linewidth]{../figures/day_ahead_protocol.pdf}
 \caption{The day-ahead protocol drawn to scale on a 48-hour axis. Everything to the left of the gate is usable; everything to the right is being predicted. The single most consequential property of the feature construction is that no feature may cross the orange line, and the horizon band that follows from a noon gate is 12 to 35 hours rather than the 1 to 24 that an unstated protocol would imply.}
 \label{fig:protocol}
 \end{figure}
@@ -260,7 +260,7 @@ Quality control clips physically impossible negatives, forward-fills the irregul
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/01_data_overview.png}
+\includegraphics[width=\linewidth]{../figures/01_data_overview.png}
 \caption{The dataset. Clockwise from top left: daily mean capacity factor across the sample; reported installed capacity, which grew from 39.7 to 50.5 GW and is the reason the target is normalised; mean capacity factor by month and hour, showing the deterministic envelope the physical features encode; and the distribution of the clear-sky index over daylight hours, which is the quantity the models actually have to learn.}
 \label{fig:data_overview}
 \end{figure}
@@ -360,7 +360,7 @@ The pipeline is a Python package of roughly 4{,}700 lines under \texttt{src/risk
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/pipeline_architecture.pdf}
+\includegraphics[width=\linewidth]{../figures/pipeline_architecture.pdf}
 \caption{The pipeline. The orange boundary is the only structural safety property in the system: everything above it may consume observations freely, and everything at or below it may consume only what existed at gate closure. The three boxes at the bottom consume the same backtest output, which is what allows the forecasting, dispatch, drift and explainability results to be compared without re-running the forecaster three times.}
 \label{fig:pipeline}
 \end{figure}
@@ -438,7 +438,7 @@ prophet & raw & 0.0469 & 0.0789 & 0.865 & 1.161 & 0.303 & $-$60.4\% \\
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/02_leaderboard.png}
+\includegraphics[width=\linewidth]{../figures/02_leaderboard.png}
 \caption{The full leaderboard on both a probabilistic and a deterministic score, with fold-to-fold standard errors. Blue bars are raw model output, red bars the same model after split-conformal calibration. The error bars are the reason Section 6.1 describes the top of the table as a cluster rather than a ranking.}
 \label{fig:leaderboard}
 \end{figure}
@@ -467,14 +467,14 @@ Conformal calibration improves the interval score of every quantile-capable mode
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/04_coverage_vs_width.png}
+\includegraphics[width=\linewidth]{../figures/04_coverage_vs_width.png}
 \caption{Coverage against width. Calibration moves every model upward toward the nominal line at a modest cost in sharpness. A model in the lower left of this plot is not a sharp model; it is a wrong one.}
 \label{fig:coverage}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/03_reliability.png}
+\includegraphics[width=\linewidth]{../figures/03_reliability.png}
 \caption{Reliability. Nominal quantile level against observed exceedance frequency; a perfectly calibrated forecaster lies on the diagonal. Deviation below the diagonal in the upper tail is the signature of intervals that are too narrow.}
 \label{fig:reliability}
 \end{figure}
@@ -493,7 +493,7 @@ Even after CQR, coverage sits between 0.76 and 0.88 against a 0.90 nominal. This
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/05_fan_chart.png}
+\includegraphics[width=\linewidth]{../figures/05_fan_chart.png}
 \caption{The five most variable consecutive delivery days in the test set, with nested 50, 80 and 90 percent intervals. The realised output escapes the 90 percent band twice in five days, on 1 June above and on 4 June below. Two exceedances in five days is visibly worse than the one-in-ten the interval promises, and is the 0.846 marginal coverage of the leading model seen at close range.}
 \label{fig:fan}
 \end{figure}
@@ -504,7 +504,7 @@ Skill against seasonal persistence is approximately 10 percent for the leading c
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/06_error_decomposition.png}
+\includegraphics[width=\linewidth]{../figures/06_error_decomposition.png}
 \caption{Error decomposition. Error grows only weakly across the 12 to 35 hour horizon band, which is itself a diagnostic of the NWP-free setting: without a weather model, a 13-hour forecast is not much better informed than a 35-hour one. Error rises monotonically from the clearest to the cloudiest regime known at gate closure, confirming that the cloud-state features are being used rather than ignored.}
 \label{fig:errordecomp}
 \end{figure}
@@ -535,7 +535,7 @@ At the baseline parameters the advantage of the stochastic policy over the point
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/07_dispatch.png}
+\includegraphics[width=\linewidth]{../figures/07_dispatch.png}
 \caption{Dispatch outcomes by policy. The middle panel carries the operational content: the distributions overlap heavily in the body and separate in the tail, and it is the tail that determines whether a month is profitable.}
 \label{fig:dispatch}
 \end{figure}
@@ -559,7 +559,7 @@ Sweeping the fixed commitment quantile produces a clean U-shaped regret curve wi
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/11_quantile_sweep.png}
+\includegraphics[width=\linewidth]{../figures/11_quantile_sweep.png}
 \caption{Regret against commitment quantile. The empirical optimum sits below the newsvendor fractile. The classical newsvendor has no recourse, whereas this operator has a battery that absorbs after the fact exactly the shortfall a conservative commitment would have hedged in advance, so part of the newsvendor premium has already been paid for in hardware.}
 \label{fig:sweep}
 \end{figure}
@@ -574,7 +574,7 @@ Within the set, the relationship is still loose enough to invert on individual p
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/08_forecast_vs_decision.png}
+\includegraphics[width=\linewidth]{../figures/08_forecast_vs_decision.png}
 \caption{Forecast quality against decision value for all twenty configurations. Ranking models by a proper scoring rule and ranking them by money are correlated exercises, not identical ones.}
 \label{fig:value}
 \end{figure}
@@ -602,7 +602,7 @@ Values are the percentage reduction in regret achieved by the stochastic policy 
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/13_sensitivity.png}
+\includegraphics[width=\linewidth]{../figures/13_sensitivity.png}
 \caption{The value of the predictive distribution across the penalty and storage grid. It ranges from 3 to 67 percent, which is why no single ``probabilistic beats point'' number is meaningful without stating the penalty regime and the flexibility available.}
 \label{fig:sensitivity}
 \end{figure}
@@ -631,7 +631,7 @@ Drift-triggered retraining attains the best value on every accuracy metric while
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/09_drift.png}
+\includegraphics[width=\linewidth]{../figures/09_drift.png}
 \caption{Retraining policies at an equal budget. The seasonal cycle dominates the error trajectory and the three policies track one another closely for most of the period, separating in the second winter. The lower panel plots improvement relative to never retraining rather than absolute MAE, because on a zero-based axis 0.0434 and 0.0439 are indistinguishable and the result would be invisible.}
 \label{fig:drift}
 \end{figure}
@@ -665,7 +665,7 @@ Split conformal achieves correct \emph{marginal} coverage, 0.903 against a 0.90 
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/12_adaptive_conformal.png}
+\includegraphics[width=\linewidth]{../figures/12_adaptive_conformal.png}
 \caption{Rolling coverage across the test year, and the coverage-width trade-off. The first implementation of the adaptive procedure widened intervals by requesting increasingly extreme quantiles from the fitted grid; because interpolation clamps outside the 0.05 to 0.95 range, the interval could never exceed the model's own 90 percent band, coverage saturated at 0.70, and adaptation appeared actively harmful. The score-based formulation reported here has no such ceiling.}
 \label{fig:aci}
 \end{figure}
@@ -697,7 +697,7 @@ The two rankings disagree almost completely, and the disagreement is the finding
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/10_shap.png}
+\includegraphics[width=\linewidth]{../figures/10_shap.png}
 \caption{TreeSHAP attribution by feature family, the leading individual features, and a dependence curve for the strongest of them. The features whose attributions correlate most strongly with realised error are all clear-sky-index terms and all correlate negatively, meaning the model errs most on the days when it is leaning hardest on recent cloud state.}
 \label{fig:shap}
 \end{figure}
@@ -731,7 +731,7 @@ Three results, in increasing order of practical consequence.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/14_transfer_curves.png}
+\includegraphics[width=\linewidth]{../figures/14_transfer_curves.png}
 \caption{MAE against local training budget at each target site, fold-averaged over five 60-day evaluation windows. The x-axis is logarithmic because the budgets span a factor of nearly seventy and the interesting behaviour is all at the short end. Zero-shot is drawn as a horizontal line because it consumes no local data and therefore has the same value at every budget; its intersection with the local curve is the quantity the experiment exists to measure. The pooled curve is close to flat, which is the finding restated: almost all of its performance comes from the source data, and the local rows only steer it.}
 \label{fig:transfer_curves}
 \end{figure}
@@ -742,7 +742,7 @@ The pooled curve being flat is worth dwelling on. Between seven days and 480 day
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../../figures/15_transfer_summary.png}
+\includegraphics[width=\linewidth]{../figures/15_transfer_summary.png}
 \caption{Left, what is achievable in a new site's first week under each strategy. Right, the local history required before training locally overtakes borrowing. The operational reading of the left panel is that the first week is not a period of poor forecasts to be endured, but a period in which a borrowed model performs about as well as it ever will.}
 \label{fig:transfer_summary}
 \end{figure}

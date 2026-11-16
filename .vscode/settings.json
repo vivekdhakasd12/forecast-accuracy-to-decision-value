@@ -1,0 +1,26 @@
+{
+  // Use the project's own Python environment (created by "Setup: install Python environment").
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"],
+
+  // Tests show up in the Testing panel (flask icon).
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests", "-q"],
+
+  // Notebooks run from the project root, so paths like data/... and case_study_1/... work.
+  "jupyter.notebookFileRoot": "${workspaceFolder}",
+
+  // Integrated terminals can import the package without extra setup.
+  "terminal.integrated.env.osx": { "PYTHONPATH": "${workspaceFolder}/src" },
+  "terminal.integrated.env.linux": { "PYTHONPATH": "${workspaceFolder}/src" },
+  "terminal.integrated.env.windows": { "PYTHONPATH": "${workspaceFolder}\\src" },
+
+  // Keep the explorer tidy.
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.DS_Store": true
+  }
+}

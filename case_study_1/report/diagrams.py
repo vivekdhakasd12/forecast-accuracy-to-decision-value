@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parents[2] / "figures"
+OUT = Path(__file__).resolve().parents[1] / "figures"
 ORANGE, INK, SLATE, HAIR = "#E64415", "#1A1A1A", "#555555", "#C9C6C0"
 SKY, SAND = "#1B6E77", "#F0EDE7"
 

@@ -6,37 +6,32 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# raw and intermediate data: large, and rebuilt by `make data`
-data/raw/*.csv
-data/interim/*.parquet
-data/processed/*.parquet
+# downloaded and intermediate data: large, rebuilt by `make data` / `make data-de`
+data/raw/
+data/interim/
+data/processed/
 
 # large generated artefacts
-results/*.parquet
+case_study_1/results/*.parquet
+thesis/results/*.parquet
 
 # LaTeX build products
-docs/report/*.aux
-docs/report/*.log
-docs/report/*.out
-docs/report/*.toc
-docs/report/*.lof
+case_study_1/report/*.aux
+case_study_1/report/*.log
+case_study_1/report/*.out
+case_study_1/report/*.toc
+case_study_1/report/*.lof
 
 # macOS
 .DS_Store
 
-# private correspondence (never publish)
-docs/supervisor_email_*.md
-
-# large media and duplicated bundles
-presentation/*.mp4
-presentation/colab_bundle/
-presentation/colab_bundle.zip
-
-# LinkedIn drafts (kept local)
-docs/thesis/linkedin/
-
 # private API keys (never publish)
 .env
 
-# downloaded source data (SMARD, Energy-Charts, reBAP): rebuilt by `make data-de`
-data/raw/*/
+# private: supervisor emails and LinkedIn drafts (kept on this computer only)
+private/
+
+# large media and duplicated bundles
+case_study_1/presentation/*.mp4
+case_study_1/presentation/colab_bundle/
+case_study_1/presentation/colab_bundle.zip

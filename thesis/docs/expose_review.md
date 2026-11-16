@@ -6,6 +6,8 @@ How this was produced: six independent review lenses (claims vs evidence, DFL te
 
 > **Update, 16 Nov 2026:** the scope stays exactly as in the approved exposé. Where this review suggests dropping or moving items (SPO+, the differentiable layer, drift, transfer, multi-zone), ignore that and use the full-scope plan in [THESIS_IN_PLAIN_WORDS.md](THESIS_IN_PLAIN_WORDS.md), sections 7 and 8. The technical and quality findings still apply.
 
+> **Note on paths:** this review was written before the repository was reorganised. `results/`, `figures/`, `experiments/`, `presentation/` and `docs/report/` now live under `case_study_1/`, and the thesis documents under `thesis/docs/`.
+
 ## Verdict in brief
 
 The thesis is sound and still feasible. The research question (how much of the gap to perfect foresight a decision-trained model closes, and what it gives up in calibration) is legitimate. The CS1 codebase is a strong, tested base for it: leakage-audited features, a two-stage HiGHS LP, and an oracle-based regret. As written, though, the exposé is not ready to execute. Three things matter most:

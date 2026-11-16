@@ -39,11 +39,11 @@ FAINT = RGBColor(0xFA, 0xF6, 0xF4)    # faint warm tint for callout box
 
 FONT = "Lato"
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
-FIG = DOCS / "report" / "figures"
-LOGO = str(DOCS / "assets" / "srh_logo.jpg")
-OUT = ROOT / "presentation" / "Case_Study_1_Presentation.pptx"
+FIG = ROOT / "case_study_1" / "figures"
+LOGO = str(ROOT / "case_study_1" / "report" / "assets" / "srh_logo.jpg")
+OUT = ROOT / "case_study_1" / "presentation" / "Case_Study_1_Presentation.pptx"
 LOGO_RATIO = 457 / 591  # height / width
 
 # en dash and >= as used in the exposé
@@ -544,7 +544,7 @@ def _load_script(path):
     return notes
 
 
-SCRIPT = ROOT / "presentation" / "speaker_script.md"
+SCRIPT = ROOT / "case_study_1" / "presentation" / "speaker_script.md"
 if SCRIPT.exists():
     notes = _load_script(SCRIPT)
     for idx, sl in enumerate(prs.slides, start=1):

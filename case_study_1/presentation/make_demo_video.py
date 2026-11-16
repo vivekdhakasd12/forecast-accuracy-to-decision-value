@@ -25,9 +25,9 @@ import numpy as np
 import pandas as pd
 from matplotlib.animation import FFMpegWriter
 
-ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
-OUT = ROOT / "presentation" / "demo_decision_loop.mp4"
+ROOT = Path(__file__).resolve().parents[2]
+RESULTS = ROOT / "case_study_1" / "results"
+OUT = ROOT / "case_study_1" / "presentation" / "demo_decision_loop.mp4"
 
 ORANGE, INK, SLATE, HAIR = "#E64415", "#1A1A1A", "#555555", "#D8D4CE"
 BLUE, GREEN, RED, SAND = "#4c78a8", "#54a24b", "#e45756", "#F7F4F0"

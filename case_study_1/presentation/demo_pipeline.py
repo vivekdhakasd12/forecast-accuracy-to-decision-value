@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 O, B, D, G, R, X = ("\033[38;5;202m", "\033[1m", "\033[2m", "\033[32m", "\033[31m", "\033[0m")

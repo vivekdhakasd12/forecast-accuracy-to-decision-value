@@ -18,16 +18,16 @@ engine — `pdflatex` will fail.
 
 ## Figures
 
-- The report pulls figures from the shared `figures/` directory at the project
-  root, which is written by the five experiment scripts in `experiments/`.
-  Regenerate them with `make e1` through `make e5` from the repository root.
+- The report pulls figures from the `case_study_1/figures/` directory, which is written by the five experiment
+  scripts in `case_study_1/experiments/`. Regenerate them with `make cs1-e1`
+  through `make cs1-e5` from the repository root.
   There is deliberately only one copy: keeping a second set beside the report
   meant the two could disagree about what the results were.
 - `figures/pipeline_architecture.pdf` and `figures/day_ahead_protocol.pdf` are
   schematics drawn by `diagrams.py` in this directory:
 
   ```bash
-  ../../.venv/bin/python diagrams.py
+  ../../.venv/bin/python diagrams.py   # run from case_study_1/report/
   ```
 
   They are vector PDFs; everything else is a 200 dpi raster, which at the 13 cm

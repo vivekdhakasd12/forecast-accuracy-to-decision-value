@@ -16,8 +16,14 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_RAW = ROOT / "data" / "raw"
 DATA_INTERIM = ROOT / "data" / "interim"
 DATA_PROCESSED = ROOT / "data" / "processed"
-RESULTS = ROOT / "results"
-FIGURES = ROOT / "figures"
+# Case Study 1 outputs (experiments e1..e5) stay with the case study.
+CASE_STUDY_1 = ROOT / "case_study_1"
+RESULTS = CASE_STUDY_1 / "results"
+FIGURES = CASE_STUDY_1 / "figures"
+# Thesis outputs get their own folders so the two never overwrite each other.
+THESIS = ROOT / "thesis"
+THESIS_RESULTS = THESIS / "results"
+THESIS_FIGURES = THESIS / "figures"
 
 for _p in (DATA_RAW, DATA_INTERIM, DATA_PROCESSED, RESULTS, FIGURES):
     _p.mkdir(parents=True, exist_ok=True)

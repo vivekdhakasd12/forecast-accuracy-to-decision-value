@@ -1,17 +1,20 @@
 [project]
 name = "riskaware-pv"
-version = "0.1.0"
-description = "Probabilistic day-ahead PV forecasting and risk-aware battery dispatch under concept drift"
+version = "0.2.0"
+description = "From forecast accuracy to decision value: decision-focused learning for day-ahead solar commitment (Master's thesis), built on Case Study 1"
 requires-python = ">=3.10"
 dependencies = [
   "numpy>=1.26", "pandas>=2.1", "scipy>=1.11", "scikit-learn>=1.4",
   "lightgbm>=4.0", "xgboost>=2.0", "matplotlib>=3.8", "shap>=0.44",
   "statsmodels>=0.14", "pyarrow>=14", "pyyaml>=6.0", "river>=0.21", "tqdm>=4.66",
+  "prophet>=1.1",
 ]
 
 [project.optional-dependencies]
 deep = ["torch>=2.2"]
 dev = ["pytest>=8.0"]
+notebook = ["ipykernel>=6.29", "nbformat>=5.9", "nbclient>=0.10", "nbconvert>=7.16"]
+slides = ["python-pptx>=1.0"]
 
 [build-system]
 requires = ["setuptools>=68"]

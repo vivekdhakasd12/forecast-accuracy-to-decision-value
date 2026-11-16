@@ -26,9 +26,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOK = ROOT / "presentation" / "Case_Study_1_Demo.ipynb"
-OUT = ROOT / "presentation" / "demo_notebook_walkthrough.mp4"
+ROOT = Path(__file__).resolve().parents[2]
+NOTEBOOK = ROOT / "case_study_1" / "presentation" / "Case_Study_1_Demo.ipynb"
+OUT = ROOT / "case_study_1" / "presentation" / "demo_notebook_walkthrough.mp4"
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
 W, H, FPS = 1920, 1080, 25

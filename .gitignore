@@ -35,3 +35,6 @@ private/
 case_study_1/presentation/*.mp4
 case_study_1/presentation/colab_bundle/
 case_study_1/presentation/colab_bundle.zip
+
+# build leftovers from `pip install -e .`
+*.egg-info/

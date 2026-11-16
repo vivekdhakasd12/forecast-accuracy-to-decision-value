@@ -1,0 +1,58 @@
+# RiskAware-PV -- default experimental configuration.
+# Every number a reviewer might want to challenge lives here.
+
+seed: 20260101
+
+site:
+  name: DE_transparency
+  latitude: 51.0          # load-weighted centroid of Germany
+  longitude: 10.0
+  capacity_mw: 45000.0
+
+forecast:
+  gate_hour: 12           # day-ahead market closure (UTC)
+  horizon: 24             # deliver all 24 hours of day D+1
+  target: solar
+  quantiles: [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]
+  lags_hours: [24, 25, 26, 48, 72, 168, 336]
+  rolling_windows: [24, 72, 168]
+
+backtest:
+  train_years: 2.0
+  calibration_days: 90    # split-conformal slice, never scored
+  test_days: 365
+  step_days: 30
+  min_train_days: 365
+
+battery:
+  energy_mwh: 4.0
+  power_mw: 1.0
+  eta_charge: 0.95
+  eta_discharge: 0.95
+  soc_init: 0.5
+  soc_min: 0.05
+  soc_max: 0.95
+  pv_nameplate_mw: 2.0
+  load_peak_mw: 1.2
+
+market:
+  import_price_peak: 220.0
+  import_price_offpeak: 120.0
+  export_price: 45.0
+  imbalance_penalty_up: 300.0     # being short is expensive
+  imbalance_penalty_down: 90.0    # being long merely wastes
+  peak_hours: [7, 8, 9, 10, 17, 18, 19, 20]
+  cvar_alpha: 0.90
+  n_scenarios: 40
+
+drift:
+  # Detectors run on a z-scored error stream (see ReferenceStandardizer), so
+  # these thresholds are scale-free.  On the raw stream, whose magnitude is
+  # ~0.04, ADWIN's absolute Hoeffding bound never fires at any delta.
+  adwin_delta: 0.002
+  ph_delta: 0.05
+  ph_lambda: 8.0
+  psi_bins: 10
+  psi_threshold: 0.20
+  retrain_budget: 6
+  cooldown_days: 21

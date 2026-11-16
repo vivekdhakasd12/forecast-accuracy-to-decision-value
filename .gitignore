@@ -1,0 +1,36 @@
+# virtual environment
+.venv/
+
+# python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# raw and intermediate data: large, and rebuilt by `make data`
+data/raw/*.csv
+data/interim/*.parquet
+data/processed/*.parquet
+
+# large generated artefacts
+results/*.parquet
+
+# LaTeX build products
+docs/report/*.aux
+docs/report/*.log
+docs/report/*.out
+docs/report/*.toc
+docs/report/*.lof
+
+# macOS
+.DS_Store
+
+# private correspondence (never publish)
+docs/supervisor_email_*.md
+
+# large media and duplicated bundles
+presentation/*.mp4
+presentation/colab_bundle/
+presentation/colab_bundle.zip
+
+# LinkedIn drafts (kept local)
+docs/thesis/linkedin/

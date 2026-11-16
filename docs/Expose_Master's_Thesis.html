@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exposé · Case Study 2 · Devendra Singh Dhakad</title>
+<style>
+  /* Bundled Lato (OFL) so the PDF renders identically offline and embeds the font */
+  @font-face { font-family:'Lato'; src:url('assets/fonts/Lato-Regular.ttf'); font-weight:400; font-style:normal; }
+  @font-face { font-family:'Lato'; src:url('assets/fonts/Lato-Italic.ttf'); font-weight:400; font-style:italic; }
+  @font-face { font-family:'Lato'; src:url('assets/fonts/Lato-Bold.ttf'); font-weight:700; font-style:normal; }
+  @font-face { font-family:'Lato'; src:url('assets/fonts/Lato-BoldItalic.ttf'); font-weight:700; font-style:italic; }
+  @font-face { font-family:'Lato'; src:url('assets/fonts/Lato-Black.ttf'); font-weight:900; font-style:normal; }
+</style>
+<style>
+  :root {
+    --srh-orange: #E64415;
+    --ink: #1a1a1a;
+    --muted: #555555;
+    --link-blue: #0b5bd3;
+    --rule: #e3e3e3;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  @page {
+    size: A4;
+    margin: 2.5cm;
+  }
+
+  html { background: #f0f0f0; }
+
+  body {
+    font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  /* Screen preview: simulate A4 pages */
+  .sheet {
+    background: #ffffff;
+    width: 21cm;
+    min-height: 29.7cm;
+    margin: 1.2rem auto;
+    padding: 2.5cm;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.12);
+  }
+
+  @media print {
+    html { background: #ffffff; }
+    .sheet {
+      width: auto;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+    /* Title page stands alone; body sections flow to keep within the ~5-page envelope */
+    .title-page { page-break-after: always; }
+    a { color: var(--link-blue) !important; }
+  }
+
+  /* ---------- Title page ---------- */
+  .title-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .title-page .logo {
+    margin-top: 1.2cm;
+    width: 3.4cm;
+    height: auto;
+  }
+  .title-page .doc-kind {
+    margin-top: 3.2cm;
+    font-size: 13pt;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .title-page h1 {
+    margin-top: 0.5cm;
+    font-size: 30pt;
+    font-weight: 900;
+    letter-spacing: 0.01em;
+  }
+  .title-page .title-rule {
+    width: 2.6cm;
+    height: 2.5pt;
+    background: var(--srh-orange);
+    border: none;
+    margin: 1.1cm auto;
+  }
+  .title-page .working-title {
+    font-size: 14.5pt;
+    font-weight: 700;
+    line-height: 1.45;
+    max-width: 13.5cm;
+    text-wrap: balance;
+    hyphens: none;
+  }
+  .title-page .meta {
+    margin-top: 2.4cm;
+    font-size: 11.5pt;
+    line-height: 2.05;
+  }
+  .title-page .meta .name {
+    font-weight: 700;
+    font-size: 12.5pt;
+  }
+  .title-page .meta .sep { color: var(--srh-orange); padding: 0 0.45em; }
+  .title-page .date {
+    margin-top: 1.6cm;
+    color: var(--muted);
+    font-size: 11pt;
+  }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 0.45cm; }
+
+  section.no-break { break-inside: avoid; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55em;
+    margin-bottom: 0.32cm;
+    break-after: avoid;
+  }
+  .sec-head .num {
+    color: var(--srh-orange);
+    font-weight: 900;
+    font-size: 13pt;
+  }
+  .sec-head h2 {
+    font-size: 13pt;
+    font-weight: 900;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+  }
+  .sec-rule {
+    border: none;
+    height: 1pt;
+    background: var(--srh-orange);
+    opacity: 0.55;
+    margin: 0.32cm 0;
+  }
+
+  p { text-align: justify; margin-bottom: 0.2cm;
+      /* No automatic hyphenation anywhere in the body. Chrome's hyphenator
+         splits technical terms mid-word ("deci-sion", "differen-tiable"), and
+         with a non-breaking hyphen inside a compound it even produced
+         "decision-fo-cused". The measure is wide enough that justification
+         without hyphenation leaves no visible rivers. */
+      hyphens: none; -webkit-hyphens: none;
+      orphans: 2; widows: 2; }
+  p:last-child { margin-bottom: 0; }
+
+  .working-title-body {
+    font-size: 12.5pt;
+    font-weight: 700;
+    text-align: left;
+    line-height: 1.5;
+  }
+
+  h3.sub {
+    font-size: 11pt;
+    font-weight: 900;
+    margin: 0.35cm 0 0.15cm;
+    break-after: avoid;
+  }
+
+  ul, ol { margin: 0 0 0.3cm 0; padding-left: 1.5em; }
+  li { text-align: justify; margin-bottom: 0.13cm;
+       hyphens: none; -webkit-hyphens: none; orphans: 2; widows: 2; }
+  li:last-child { margin-bottom: 0; }
+
+  a { color: var(--link-blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .gap-para {
+    font-style: italic;
+    margin-top: 0.35cm;
+  }
+
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-bottom: 0.35cm;
+  }
+  th {
+    text-align: left;
+    font-weight: 900;
+    font-size: 9.5pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0 0.5em 0.16cm 0;
+    border-bottom: 1pt solid #bbbbbb;
+    white-space: nowrap;
+  }
+  td {
+    vertical-align: top;
+    padding: 0.18cm 0.5em 0.18cm 0;
+    text-align: left;
+  }
+  tr { break-inside: avoid; }
+  td.phase, td.weeks { font-weight: 700; white-space: nowrap; }
+  table.timeline td.weeks { width: 2.4cm; }
+
+  /* ---------- References ---------- */
+  .refs-head {
+    font-size: 13pt;
+    font-weight: 900;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+    color: var(--srh-orange);
+    margin-bottom: 0.32cm;
+    break-after: avoid;
+  }
+  .refs p {
+    text-align: left;
+    padding-left: 1.7em;
+    text-indent: -1.7em;
+    margin-bottom: 0.14cm;
+    font-size: 10pt;
+    line-height: 1.32;
+    break-inside: avoid;
+  }
+  .refs i { font-style: italic; }
+
+  /* ---------- Work plan table and reference list ---------- */
+  table.plan { width: 100%; border-collapse: collapse; margin: 0.5rem 0 0.7rem; font-size: 10pt; }
+  table.plan th { text-align: left; font-weight: 700; color: var(--muted);
+    border-bottom: 1.2px solid #bbb; padding: 4px 10px 5px 0; }
+  table.plan td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.plan tr td:first-child { white-space: nowrap; font-weight: 700; color: var(--srh-orange); }
+  p.refnote { font-size: 9.5pt; color: var(--muted); margin-bottom: 0.45rem; }
+  ol.refs { font-size: 10pt; padding-left: 1.2rem; }
+  /* APA reference lists are flush left; justifying them stretches the short
+     entries around the long DOIs into visible gaps. */
+  ol.refs li { margin-bottom: 0.4rem; line-height: 1.35; text-align: left; }
+
+  /* Headings keep their words whole and stay with the text that follows them. */
+  h1, h2, h3, .doc-kind, .working-title, .working-title-body, .sec-head {
+    hyphens: none; }
+  h2, h3, .sec-head { break-after: avoid; page-break-after: avoid; }
+  table.plan tr { break-inside: avoid; page-break-inside: avoid; }
+  table.plan td, table.plan th { hyphens: none; -webkit-hyphens: none; }
+</style>
+</head>
+<body>
+
+<!-- ===================== TITLE PAGE ===================== -->
+<div class="sheet title-page" data-screen-label="Title page">
+  <img class="logo" src="assets/srh_logo.jpg" alt="SRH logo">
+
+  <div class="doc-kind">Master&rsquo;s Thesis</div>
+  <h1>Exposé</h1>
+
+  <hr class="title-rule">
+
+  <div class="working-title">From Forecast Accuracy to Decision Value: Decision‑Focused Learning for Day‑Ahead Renewable Energy Commitment</div>
+
+  <div class="meta">
+    <div class="name">Devendra Singh Dhakad<span class="sep">&bull;</span>Matriculation No. 100004684</div>
+    <div>M.Sc. Data Science and Artificial Intelligence</div>
+    <div>Supervisor: Prof. Dr. Mehrdad Jalali</div>
+    <div>SRH University of Applied Sciences Heidelberg</div>
+  </div>
+
+  <div class="date">29 September 2026</div>
+</div>
+
+<!-- ===================== BODY ===================== -->
+<div class="sheet" data-screen-label="Sections 1&ndash;3">
+
+  <section>
+    <div class="sec-head"><span class="num">1</span><h2>Working Title</h2></div>
+    <p class="working-title-body">&ldquo;From Forecast Accuracy to Decision Value: Decision‑Focused Learning for Day‑Ahead Renewable Energy Commitment&rdquo;</p>
+  </section>
+
+  <hr class="sec-rule">
+
+  <section>
+    <div class="sec-head"><span class="num">2</span><h2>Introduction &amp; Relevance</h2></div>
+    <p>A renewable generator trading in the European day‑ahead market must commit, at gate closure, to an hourly delivery schedule for the whole of the following day. Deviations are settled at asymmetric prices: a short position is bought back at a punitive rate, while a long position is absorbed for little. Because the two errors carry different costs, the cost‑minimising commitment is not the expected generation but a quantile of its predictive distribution, determined by the penalty ratio (Pinson et al., 2007; Morales et al., 2014).</p>
+    <p>Standard practice separates this into two stages. A forecaster is trained to minimise a statistical loss such as the pinball loss or CRPS, and its output is then passed to an optimiser that decides the schedule. The two stages never speak to each other: the forecaster is never told what its errors cost, and the optimiser cannot ask for a forecast shaped differently.</p>
+    <p>My Case Study 1 measured how much that separation costs on real data. Building a leakage‑audited day‑ahead pipeline on German generation data and settling every forecast through a two‑stage stochastic dispatch program, it found that CRPS and realised dispatch regret correlate at only <em>r</em> = 0.88 across twenty model variants, and that individual pairs invert: a model with a seven percent worse CRPS was cheaper to act on. The value of committing against the full predictive distribution rather than a point forecast ranged from 3 to 67 percent of regret depending on the imbalance penalty and the storage available, and the two risk‑averse commitment policies reduced physical shortfalls while increasing total cost.</p>
+    <p>Those results establish the gap but do not close it. If the objective is cost, the natural response is to stop optimising a proxy and train the forecaster through the optimiser itself. Decision‑focused learning does exactly this, and has matured rapidly (Elmachtoub &amp; Grigas, 2022; Mandi et al., 2024), yet it is still demonstrated mainly on small or synthetic problems, and the renewable‑forecasting literature continues to evaluate models by scoring rule. This thesis brings the two together on an audited, realistic pipeline, and asks not only whether decision‑focused training wins, but by how much, under which market and flexibility conditions, and at what cost to the statistical properties practitioners rely on.</p>
+  </section>
+
+  <hr class="sec-rule">
+
+  <section>
+    <div class="sec-head"><span class="num">3</span><h2>Research Question &amp; Objectives</h2></div>
+
+    <h3 class="sub">Main Question</h3>
+    <ul>
+      <li>Does training a forecaster through the dispatch optimiser reduce realised commitment cost compared with training it on a proper scoring rule, and under which penalty, flexibility and drift conditions does any advantage appear?</li>
+    </ul>
+
+    <h3 class="sub">Sub‑questions</h3>
+    <ol>
+      <li>How much of the remaining gap to perfect foresight can decision‑focused training close, relative to the strongest two‑stage baseline established in Case Study 1?</li>
+      <li>Which formulation performs best on this problem: the SPO+ surrogate loss, a differentiable optimisation layer, or a simpler cost‑weighted training objective?</li>
+      <li>What is sacrificed? A decision‑trained forecaster has no incentive to be calibrated. The trade‑off between realised cost and calibration, sharpness and interval validity is measured rather than assumed.</li>
+      <li>Does the advantage survive concept drift and periodic retraining, or does a decision‑trained model degrade faster than a score‑trained one?</li>
+      <li>Is a decision‑trained model portable? Case Study 1 showed a score‑trained model transfers across European bidding zones; a model fitted to one cost structure may not.</li>
+    </ol>
+
+    <h3 class="sub">Objectives</h3>
+    <ul>
+      <li>Extend the existing pipeline with a differentiable dispatch layer, so gradients of realised cost reach the forecaster&rsquo;s parameters.</li>
+      <li>Implement and compare three decision‑focused formulations: SPO+ (Elmachtoub &amp; Grigas, 2022), a convex optimisation layer (Agrawal et al., 2019), and a cost‑weighted quantile loss as a cheap baseline.</li>
+      <li>Replace the synthetic tariff of Case Study 1 with settled day‑ahead and imbalance prices, so the euro figures describe a real market rather than an illustrative one.</li>
+      <li>Evaluate across several European bidding zones and across the penalty‑by‑storage grid, rather than at a single operating point.</li>
+      <li>Audit the calibration of every decision‑trained model, and test whether conformal calibration can be applied on top without discarding the cost advantage.</li>
+      <li>Release the extension as a reproducible addition to the existing open pipeline, with the leakage guard and test suite carried forward.</li>
+    </ul>
+  </section>
+
+</div>
+
+<div class="sheet" data-screen-label="Sections 4&ndash;5">
+
+  <section>
+    <div class="sec-head"><span class="num">4</span><h2>State of the Art</h2></div>
+    <ul>
+      <li><strong>Forecast then optimise:</strong> Pinson et al. (2007) show that a wind producer facing asymmetric imbalance prices should bid a quantile of the predictive distribution rather than its mean, and quantify the revenue gain. Morales et al. (2014) develop the stochastic‑programming machinery for renewables in electricity markets. Both take the forecast as given and optimise around it.</li>
+      <li><strong>Probabilistic forecasting and its scoring:</strong> Gneiting &amp; Katzfuss (2014) set out the maximise‑sharpness‑subject‑to‑calibration principle, and Hong et al. (2016) established quantile‑based evaluation as the norm for energy forecasting through GEFCom2014. This literature measures forecasts, not decisions.</li>
+      <li><strong>Distribution‑free calibration:</strong> Romano et al. (2019) combine quantile regression with conformal prediction, and Gibbs &amp; Cand&egrave;s (2021) adapt the miscoverage level online so coverage survives distribution shift. Case Study 1 found split conformal met its marginal guarantee while covering only 83 percent in its worst month, which the adaptive method repaired.</li>
+      <li><strong>Decision‑focused learning:</strong> Elmachtoub &amp; Grigas (2022) introduce the SPO+ loss, a convex surrogate for decision regret with consistency guarantees for linear objectives. Donti et al. (2017) train models end to end through stochastic optimisation tasks. Amos &amp; Kolter (2017) and Agrawal et al. (2019) make optimisation problems differentiable layers, which is the machinery this thesis needs, since the dispatch problem here is a linear program. Mandi et al. (2024) survey the field and note that benchmarks remain small and largely synthetic.</li>
+      <li><strong>Decision‑focused methods in energy:</strong> Yu et al. (2024) apply end‑to‑end learning to preventive dispatch in renewables‑rich systems, indicating the approach is reaching power systems but is not yet standard for day‑ahead market commitment.</li>
+      <li><strong>The gap:</strong> the energy forecasting literature optimises scoring rules; the decision‑focused literature optimises decisions on small problems. Case Study 1 established empirically, on real data and with an audited leakage guard, that the two objectives diverge here. What is missing is a study that closes the loop on this problem and reports what the closure is worth, what it costs in statistical validity, and whether it holds under drift and across sites.</li>
+    </ul>
+  </section>
+
+  <hr class="sec-rule">
+
+  <section>
+    <div class="sec-head"><span class="num">5</span><h2>Methodology</h2></div>
+    <p>The thesis builds directly on the pipeline developed in Case Study 1, which already provides the parts that are expensive to get right: a leakage‑safe day‑ahead feature construction verified by an adversarial test, a rolling‑origin backtest with a held‑out conformal calibration slice, and a two‑stage stochastic dispatch program solved with HiGHS.</p>
+    <ul>
+      <li><strong>Data.</strong> Open Power System Data for generation and load across several European bidding zones, extended with settled day‑ahead and imbalance prices so that realised cost is measured against actual market settlement rather than the synthetic tariff used previously.</li>
+      <li><strong>Baselines.</strong> The strongest two‑stage configurations from Case Study 1, retained unchanged so the comparison is against a real and already‑tuned opponent rather than a strawman: a conformalised quantile model, a point forecast, and the perfect‑foresight oracle that defines regret.</li>
+      <li><strong>Decision‑focused models.</strong> Three formulations of increasing complexity. First a cost‑weighted quantile loss, which needs no differentiable solver and establishes how much can be gained cheaply. Then SPO+, which is convex and has consistency guarantees for linear objectives. Then a differentiable convex optimisation layer, which allows gradients of realised cost to flow through the dispatch program itself.</li>
+      <li><strong>Evaluation.</strong> Realised cost against the oracle is the primary metric. Proper scoring rules, coverage and sharpness are reported alongside as secondary metrics, precisely so the cost of any statistical sacrifice is visible. Every comparison runs over the same rolling‑origin folds and the same penalty‑by‑storage sensitivity grid.</li>
+      <li><strong>Reproducibility.</strong> The existing test suite, seeding and one‑command reproduction are carried forward, and the leakage guard is extended to cover the new training path. A decision‑focused model that reads the future would be no more acceptable than a score‑trained one that does.</li>
+    </ul>
+    <p>Two risks are recognised at the outset. Differentiating through a linear program is delicate, because the solution is piecewise constant in the parameters and the true gradient is zero almost everywhere; the staged design above is deliberate, so that a result exists even if the differentiable layer proves unstable. Second, settled imbalance price data may not be obtainable for every zone, in which case the synthetic tariff is retained for those zones and the limitation is reported rather than hidden.</p>
+  </section>
+
+</div>
+
+<div class="sheet" data-screen-label="Sections 6&ndash;8">
+
+  <section>
+    <div class="sec-head"><span class="num">6</span><h2>Work Plan &amp; Timeline</h2></div>
+    <p>Twenty‑four weeks, beginning October 2026. Dates to be confirmed against the official thesis period.</p>
+    <table class="plan">
+      <tr><th>Weeks</th><th>Phase</th><th>Deliverable</th></tr>
+      <tr><td>1&ndash;2</td><td>Literature review on decision‑focused learning and market settlement</td><td>Structured review, refined scope</td></tr>
+      <tr><td>3&ndash;4</td><td>Acquire settled day‑ahead and imbalance prices; extend the data layer to further zones</td><td>Multi‑zone dataset with real prices</td></tr>
+      <tr><td>5&ndash;6</td><td>Re‑establish the two‑stage baselines on the new data</td><td>Baseline results table</td></tr>
+      <tr><td>7&ndash;9</td><td>Cost‑weighted quantile loss, the cheapest decision‑focused variant</td><td>First end‑to‑end comparison</td></tr>
+      <tr><td>10&ndash;13</td><td>SPO+ implementation and tuning</td><td>Convex surrogate results</td></tr>
+      <tr><td>14&ndash;17</td><td>Differentiable optimisation layer through the dispatch program</td><td>Full end‑to‑end model</td></tr>
+      <tr><td>18&ndash;19</td><td>Calibration audit and conformal calibration on top of decision‑trained models</td><td>Cost versus validity trade‑off</td></tr>
+      <tr><td>20&ndash;21</td><td>Drift and transfer experiments across zones</td><td>Robustness and portability results</td></tr>
+      <tr><td>22&ndash;24</td><td>Writing, final experiments, defence preparation</td><td>Submitted thesis</td></tr>
+    </table>
+    <p>The ordering is deliberate. Each phase produces a reportable result on its own, so that a thesis exists even if the most technically uncertain component, the differentiable layer in weeks 14 to 17, does not work as hoped.</p>
+  </section>
+
+  <hr class="sec-rule">
+
+  <section>
+    <div class="sec-head"><span class="num">7</span><h2>Expected Results &amp; Outlook</h2></div>
+    <ul>
+      <li>A quantified answer to what the two‑stage separation costs: how much of the gap to perfect foresight decision‑focused training recovers, measured in euros on settled market prices rather than a synthetic tariff.</li>
+      <li>A map of when it is worth doing. Case Study 1 showed the value of the predictive distribution ranged from 3 to 67 percent across the penalty‑by‑storage grid, so the decision‑focused advantage is expected to be similarly conditional rather than a single number.</li>
+      <li>An explicit account of the trade‑off. If decision‑trained models are cheaper but badly calibrated, that matters to any operator who also needs their forecasts for something else, and it should be stated rather than discovered later.</li>
+      <li>Evidence on portability. Whether a model trained against one market&rsquo;s cost structure transfers to another zone, extending the transfer result already established for score‑trained models.</li>
+      <li>A reproducible open pipeline, extending the existing one, with the leakage guard and test suite intact.</li>
+    </ul>
+    <p>The honest negative outcome is also useful. If decision‑focused training does not beat a well‑calibrated two‑stage pipeline on this problem, that is worth reporting: it would suggest that for day‑ahead commitment the tractable gains lie in calibration and in choosing the commitment quantile well, both of which Case Study 1 showed are substantial and cheap.</p>
+  </section>
+
+  <hr class="sec-rule">
+
+  <section>
+    <div class="sec-head"><span class="num">8</span><h2>References</h2></div>
+    <p class="refnote">Each entry was verified against Crossref or arXiv rather than written from memory. Formatting follows APA 7.</p>
+    <ol class="refs">
+      <li>Agrawal, A., Amos, B., Barratt, S., Boyd, S., Diamond, S., &amp; Kolter, J. Z. (2019). Differentiable convex optimization layers. <em>Advances in Neural Information Processing Systems, 32</em>. arXiv:1910.12430</li>
+      <li>Amos, B., &amp; Kolter, J. Z. (2017). OptNet: Differentiable optimization as a layer in neural networks. <em>Proceedings of the 34th International Conference on Machine Learning</em>. arXiv:1703.00443</li>
+      <li>Donti, P. L., Amos, B., &amp; Kolter, J. Z. (2017). Task‑based end‑to‑end model learning in stochastic optimization. <em>Advances in Neural Information Processing Systems, 30</em>. arXiv:1703.04529</li>
+      <li>Elmachtoub, A. N., &amp; Grigas, P. (2022). Smart &ldquo;predict, then optimize&rdquo;. <em>Management Science, 68</em>(1), 9&ndash;26. <a href="https://doi.org/10.1287/mnsc.2020.3922">https://doi.org/10.1287/mnsc.2020.3922</a></li>
+      <li>Gibbs, I., &amp; Cand&egrave;s, E. J. (2021). Adaptive conformal inference under distribution shift. <em>Advances in Neural Information Processing Systems, 34</em>. arXiv:2106.00170</li>
+      <li>Gneiting, T., &amp; Katzfuss, M. (2014). Probabilistic forecasting. <em>Annual Review of Statistics and Its Application, 1</em>, 125&ndash;151. <a href="https://doi.org/10.1146/annurev-statistics-062713-085831">https://doi.org/10.1146/annurev-statistics-062713-085831</a></li>
+      <li>Hong, T., Pinson, P., Fan, S., Zareipour, H., Troccoli, A., &amp; Hyndman, R. J. (2016). Probabilistic energy forecasting: Global Energy Forecasting Competition 2014 and beyond. <em>International Journal of Forecasting, 32</em>(3), 896&ndash;913. <a href="https://doi.org/10.1016/j.ijforecast.2016.02.001">https://doi.org/10.1016/j.ijforecast.2016.02.001</a></li>
+      <li>Mandi, J., Kotary, J., Berden, S., Mulamba, M., Bucarey, V., Guns, T., &amp; Fioretto, F. (2024). Decision‑focused learning: Foundations, state of the art, benchmark and future opportunities. <em>Journal of Artificial Intelligence Research, 80</em>, 1623&ndash;1701. <a href="https://doi.org/10.1613/jair.1.15320">https://doi.org/10.1613/jair.1.15320</a></li>
+      <li>Morales, J. M., Conejo, A. J., Madsen, H., Pinson, P., &amp; Zugno, M. (2014). <em>Integrating renewables in electricity markets: Operational problems</em>. Springer. <a href="https://doi.org/10.1007/978-1-4614-9411-9">https://doi.org/10.1007/978-1-4614-9411-9</a></li>
+      <li>Pinson, P., Chevallier, C., &amp; Kariniotakis, G. N. (2007). Trading wind generation from short‑term probabilistic forecasts of wind power. <em>IEEE Transactions on Power Systems, 22</em>(3), 1148&ndash;1156. <a href="https://doi.org/10.1109/TPWRS.2007.901117">https://doi.org/10.1109/TPWRS.2007.901117</a></li>
+      <li>Romano, Y., Patterson, E., &amp; Cand&egrave;s, E. J. (2019). Conformalized quantile regression. <em>Advances in Neural Information Processing Systems, 32</em>. arXiv:1905.03222</li>
+      <li>Yu, Q., Li, Z., Han, X., &amp; Ju, P. (2024). End‑to‑end learning for stochastic preventive dispatch of renewables‑rich power systems. <em>Renewable Energy, 234</em>, 121107. <a href="https://doi.org/10.1016/j.renene.2024.121107">https://doi.org/10.1016/j.renene.2024.121107</a></li>
+    </ol>
+  </section>
+
+</div>
+
+</body>
+</html>

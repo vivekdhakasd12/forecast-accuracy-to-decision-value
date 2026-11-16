@@ -1,0 +1,900 @@
+[
+ {
+  "lens": "claims",
+  "strengths": [
+   "Most headline numbers in the expos\u00e9 trace exactly to results/*.csv. CRPS vs regret r = 0.884 (I recomputed 0.8837 from results/e2_by_model.csv). The 3 to 67 percent range is e2_sensitivity.csv advantage_pct, min 2.73 and max 67.49. Split conformal worst-month coverage of 83 percent is e3_aci.csv 0.828. Risk-averse policies roughly halve the shortfall (0.45 to 0.21-0.22 MWh/day) while raising regret (198/208 vs 165 EUR/day in e2_summary.csv). The bootstrap CIs for those cost increases exclude zero: CVaR +33.7 EUR/day [17, 50], fixed quantile +43.0 [28, 58].",
+   "The infrastructure claims are true. HiGHS runs through scipy linprog(method='highs') at src/riskaware_pv/decision/dispatch.py:202-203 and :262. The adversarial poison-after-gate leakage test exists at tests/test_no_leakage.py:35 (test_features_ignore_everything_after_the_gate), and the suite collects 22 tests, as report.tex:390 says. The rolling-origin backtest with a 90-day held-out conformal block matches report.tex:313. `make all` exists and runs test plus e1 to e5.",
+   "The expos\u00e9 is open about the synthetic tariff (Sec. 3 objectives, Sec. 5 risks), and Case Study 1 already flags that Prophet inflates r (report.tex:571, 777). The honest framing is already there, which makes it easy to carry into the thesis.",
+   "The staged design in Sec. 6 (cost-weighted quantile loss, then SPO+, then a differentiable layer) is a sound fallback that guarantees a reportable result."
+  ],
+  "notes": "I checked these claims against /Users/dev/Agentic Workflows /case-study-1/results/*.csv and docs/report/report.tex, recomputing with the repo .venv. I did not modify any files.\n\nClaim-by-claim verdicts:\n- r = 0.88: exact (0.884). It is presented without its CI [0.72, 0.95] and drops to 0.62 without Prophet.\n- 'Twenty variants': 10 models x raw/CQR. They are not independent.\n- '7% worse CRPS cheaper': the CRPS gap is exact (7.45%), but the cost gap is EUR 0.39/day, which is noise.\n- 3-67%: rounded fairly (2.73 to 67.49), but it comes from a 90-day single-model grid that `make all` does not regenerate.\n- Risk-averse policies cut shortfall but cost more: exact and significant.\n- 83% worst month: exact (0.828), but 'repaired' is overstated (ACI reaches 0.86-0.88). report.tex also contains stale 81%/0.904 values.\n- Transfer across bidding zones: overstated. Zero-shot CH R2 = -6, the targets are country series, and transfer was never evaluated on cost.\n- Leakage adversarial test, HiGHS, rolling-origin backtest with conformal slice: exact.\n- One-command reproduction: partly true. `make all` runs e1 to e5 but omits the sensitivity grid.\n\nThe most consequential finding is claims-1: in Case Study 1, regret correlates with MAE at 0.98 versus 0.88 for CRPS. That changes what the thesis motivation can honestly claim.",
+  "findings": [
+   {
+    "id": "claims-1",
+    "title": "Regret tracks MAE (r = 0.98) much more closely than CRPS (r = 0.88). This undercuts the 'scoring rule is the wrong proxy' motivation",
+    "severity": "critical",
+    "evidence": "I recomputed from results/e2_by_model.csv (n = 20, stochastic policy, 120 days). Pearson(CRPS, regret) = 0.884, 95% Fisher CI [0.72, 0.95], Spearman 0.878. Pearson(MAE, regret) = 0.984, CI [0.96, 0.99]. Prophet is the only model far worse on both axes: dropping it (n = 18) gives Pearson(CRPS, regret) = 0.62 (p = 0.006) and Spearman 0.83. The expos\u00e9 (Sec. 2, para 3) presents r = 0.88 as evidence that score and cost 'diverge'. It does not mention that the point-accuracy metric explains regret almost perfectly, or that the 0.88 depends on one outlier model. report.tex:571 and :777 say this; the expos\u00e9 drops the caveat.",
+    "recommendation": "Before week 7, rewrite the motivation. Report r with its CI and the value without Prophet, and say plainly that in Case Study 1 regret was mostly driven by median/point accuracy. Then rescope what decision-focused learning (DFL) can add. The gain will most likely come from shaping the commitment quantile and errors on costly hours, not from beating CRPS. Make 'does DFL beat a point model with a tuned commitment quantile' an explicit hypothesis.",
+    "verification": {
+     "id": "claims-1",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "I recomputed every number from results/e2_by_model.csv and they hold. Pearson(CRPS, regret) = 0.884, Spearman 0.878, Pearson(MAE, regret) = 0.984. Without Prophet, Pearson(CRPS, regret) = 0.617 (p = 0.006) and Spearman 0.835. The expos\u00e9 (Sec. 2, para 2) quotes r = 0.88 as evidence of divergence and leaves out the Prophet caveat that report.tex:571 states. Critical is too high, though. Even if regret mostly tracks point accuracy, the research question (how much of the gap to the oracle a decision-trained model can close) still stands, and the thesis remains feasible. Two corrections to the evidence: (a) the MAE correlation is inflated because each raw/CQR pair has identical MAE; without Prophet it is 0.94, not 0.98. (b) r = 0.88 is already a strong correlation, which makes the word 'diverge' weak. The recommendations are sound: rewrite the motivation, and test DFL against a point model with a tuned commitment quantile. This is a framing problem, not a validity threat."
+    }
+   },
+   {
+    "id": "claims-2",
+    "title": "The '7% worse CRPS was cheaper' example is a 0.24% (EUR 0.39/day) regret difference between raw and CQR versions of the same model. It is noise, not an inversion",
+    "severity": "major",
+    "evidence": "e2_by_model.csv: gbm_quantile_k[raw] CRPS 0.03415, regret 161.74; gbm_quantile_k[cqr] CRPS 0.03178, regret 162.13 (report.tex:573). The CRPS gap is 7.45%, which is exact. The cost gap is EUR 0.39/day on about 162. For scale, the base-case stochastic-vs-point difference on 200 days has a bootstrap CI of about +/-4.3 EUR/day (from e2_daily.csv). Per-model daily regrets were not saved, so this pair cannot be tested at all. The two configurations also share the same point forecast (identical MAE), so this is a recalibration effect, not two models. Across all 190 pairs, 25 are inverted. Larger inversions exist, e.g. gbm_point[raw] has 16% worse CRPS than climatology[raw] and 5% lower regret (EUR 9/day), but they also follow MAE.",
+    "recommendation": "Drop 'cheaper to act on' or qualify it as 'statistically indistinguishable'. Save per-day regret per model and report paired bootstrap CIs. If you keep an inversion example, use a pair with distinct point forecasts and a CI that excludes zero.",
+    "verification": {
+     "id": "claims-2",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "The numbers are confirmed: CRPS 0.03415 vs 0.03178 (7.45%), regret 161.74 vs 162.13 (EUR 0.39/day), and identical MAE (0.04626). The base-case paired bootstrap CI (stochastic minus point) is [-9.2, -0.6] EUR/day, which supports the noise argument. The pair is a recalibration of one model, and 'cheaper to act on' is an overclaim. But this is one sentence in the motivation and is mostly covered by claims-1. Fixing it means rewording or saving per-model daily regrets, so it does not deserve major."
+    }
+   },
+   {
+    "id": "claims-3",
+    "title": "'Twenty model variants' are 10 base models x {raw, CQR}. Several pairs are near-duplicates, so there are about 10 effective observations",
+    "severity": "major",
+    "evidence": "e1_leaderboard.csv and e2_by_model.csv: each raw/CQR pair has identical MAE and point forecast. The regret pairs for persistence (159.4/160.6), climatology (179.49/179.44), climatology_quantile (205.7/204.9), prophet (267.8/266.8) and ridge (144.3/144.8) differ by under 1%. Averaging each pair gives n = 10: r = 0.93, CI [0.73, 0.98]. The CRPS standard errors come from only 3 folds (report.tex:842).",
+    "recommendation": "In the expos\u00e9 and the thesis, write 'twenty configurations (ten models, each raw and conformalised)'. Report r with a CI, with and without Prophet, at the model level as well as the configuration level. Do not call them independent variants.",
+    "verification": {
+     "id": "claims-3",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "Confirmed. Each raw/CQR pair shares the same MAE, several regret pairs differ by under 1%, and the model-level correlation (n = 10) is r = 0.930. This is a reporting-honesty point that overlaps with claims-1. Changing the wording to 'ten models x {raw, CQR}' and adding CIs fixes it, so it is minor, not major."
+    }
+   },
+   {
+    "id": "claims-4",
+    "title": "'Score-trained model transfers across bidding zones' overstates e5: zero-shot is badly miscalibrated, only beats a local model trained on 7 days, and was never evaluated on cost",
+    "severity": "major",
+    "evidence": "results/e5_transfer_mean.csv, zero-shot ridge: CH MAE 0.148, R2 = -6.03, PICP90 0.24. DK R2 0.57, PICP90 0.44. GB R2 0.67, PICP90 0.72. Pooled at 7 days is far better (CH MAE 0.065). Zero-shot only beats local-only until 120 days (CH) or 240 days (DK, GB) (e5_crossover.csv). Transfer used only the ridge base learner. Sites were normalised by their 99.9th generation percentile because the capacity data are incoherent outside Germany (report.tex:272, :852). The targets are national OPSD series for CH, DK and GB, not bidding zones; DK has two bidding zones and GB is outside EU market coupling. No regret or dispatch evaluation was run on transfer. Expos\u00e9 Sec. 3 sub-question 5 and Sec. 7 call this 'the transfer result already established for score-trained models'.",
+    "recommendation": "Restate it as: 'pooled training with a short local history transfers MAE well; zero-shot point accuracy beats a cold-start local model, but its intervals are not valid'. For sub-question 5, first establish a cost-based transfer baseline for the score-trained model. Do not assume one exists. Use the correct term (country series, not bidding zones) or move to ENTSO-E bidding-zone data.",
+    "verification": {
+     "id": "claims-4",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified in e5_transfer_mean.csv and e5_crossover.csv. Zero-shot CH has R2 = -6.03 and PICP90 = 0.244, pooled training at 7 days reaches MAE 0.065, and the crossover points are 120, 240 and 240 days. The base learner is ridge only, and sites are normalised by their 99.9th generation percentile (report.tex:272). No cost evaluation was run on transfer. The expos\u00e9 (Sec. 3 sub-question 5 and Sec. 7) states as established 'a score-trained model transfers across European bidding zones'. That overclaims: the targets are national series, not bidding zones, and the transfer evidence covers MAE only. Sub-question 5 rests on this, so major is justified."
+    }
+   },
+   {
+    "id": "claims-5",
+    "title": "'Split conformal 83% ... which the adaptive method repaired' overstates the ACI result, and the report contradicts itself (83% vs 81%)",
+    "severity": "major",
+    "evidence": "e3_aci.csv: split worst month 0.828, so 83% is fair. ACI worst month is 0.857, 0.874 and 0.879 for gamma = 0.005, 0.02 and 0.05, still below the 0.90 target. At gamma = 0.05 the marginal coverage drops to 0.896. report.tex:664 says 83% and 0.903 marginal. report.tex:771 and :883 say 81% and 0.904, which no current CSV supports (probably stale numbers from an older run).",
+    "recommendation": "Write 'improved worst-month coverage from 83% to 86-88%', not 'repaired'. Fix the 81%/0.904 values in report.tex before reusing any of its text in the thesis. Since the calibration audit (weeks 18-19) builds on this, define the conditional-coverage target in advance (e.g. worst-month coverage >= 0.85 with stated gamma).",
+    "verification": {
+     "id": "claims-5",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "Confirmed. e3_aci.csv gives split-conformal worst month 0.828 and ACI worst month 0.857/0.874/0.879, all below 0.90, so 'repaired' overstates the result. report.tex:771 and :883 say 81% / 0.904, while :664 and the CSV give 83% / 0.903. That is a real internal inconsistency. It is a wording and stale-number fix, though, and does not threaten the thesis design, so minor, not major. The advice to pre-register a conditional-coverage target is good."
+    }
+   },
+   {
+    "id": "claims-6",
+    "title": "The 3-67% range comes from a 90-day, single-model run that `make all` does not regenerate, and it disagrees with the 3.0% base case",
+    "severity": "major",
+    "evidence": "The Makefile e2 target runs `e2_dispatch.py --max-days 200 --all-models` without `--sensitivity`, so results/e2_sensitivity.csv is never rebuilt by the claimed one-command reproduction. sensitivity_study uses min(max_days, 90) = 90 days (experiments/e2_dispatch.py:257). by_model uses 120 days (:269), the quantile sweep 120 (:244) and the summary 200. The default cell (penalty 300, 4 MWh, 1 MW) shows 6.4% advantage in the grid but 3.0% in e2_summary.csv on 200 days. No CIs are given. Base-case stochastic minus point = -4.9 EUR/day, bootstrap 95% CI [-9.2, -0.6]; median regret is slightly worse for stochastic (114.25 vs 114.07). The grid is non-monotone (high at 150 and 1200, low at 300-600), which the 3-67 framing hides. Strictly, the percentage is 'reduction relative to point-policy regret'. Also, Makefile help and .PHONY still say e1..e4.",
+    "recommendation": "Add --sensitivity to the make target, or a `make e2-sens` target that `all` depends on. Use one common day sample for all e2 outputs, add bootstrap CIs per cell, and quote the base-case value next to the range. Fix this in the first weeks: the thesis's main evaluation reuses this grid (Sec. 5 Evaluation).",
+    "verification": {
+     "id": "claims-6",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. The Makefile e2 target lacks --sensitivity. sensitivity_study runs on min(max_days, 90) days (e2_dispatch.py:257), by_model and the quantile sweep on 120, and the summary on 200. The grid cell (300, 4) shows a 6.42% advantage against 2.97% in e2_summary.csv. My bootstrap of e2_daily.csv gives stochastic minus point = -4.89 EUR/day, CI [-9.19, -0.61], and the stochastic median is slightly worse (114.25 vs 114.07). The grid is non-monotone. The headline '3 to 67 percent' range is not reproducible from `make all` and has no uncertainty attached. Help/.PHONY still list e1..e4. Major is appropriate because the thesis evaluation reuses this grid."
+    }
+   },
+   {
+    "id": "claims-7",
+    "title": "The expos\u00e9 describes a market generator; Case Study 1 modelled a prosumer with load, a battery and a fixed imbalance penalty",
+    "severity": "major",
+    "evidence": "Expos\u00e9 Sec. 2 describes 'a renewable generator trading in the European day-ahead market'. report.tex:319-325 describe a prosumer site: national German PV scaled to 2 MW nameplate, a 1.2 MW synthetic load, a 4 MWh battery, a time-of-use import price, a feed-in export tariff, and fixed short/long penalties of 300/90 EUR/MWh (configs/default.yaml:27-46). The expos\u00e9 promises 'the strongest two-stage configurations from Case Study 1, retained unchanged' as baselines on settled day-ahead and imbalance prices. A different decision problem means those baselines cannot carry over unchanged.",
+    "recommendation": "Decide now (this is overdue for week 6-7) which decision problem the thesis studies. Then either keep the prosumer-battery LP and add real prices to it, or switch to a pure generator bidding problem and re-establish baselines (weeks 5-6). State the choice explicitly in chapter 1 and drop 'unchanged'.",
+    "verification": {
+     "id": "claims-7",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. Expos\u00e9 Sec. 2 describes 'a renewable generator trading in the European day-ahead market'. report.tex:319-325 describe a prosumer with load, a battery, a time-of-use import price, a feed-in tariff and fixed 300/90 penalties. Sec. 5 promises baselines 'retained unchanged', yet the timeline (weeks 5-6) says to 're-establish the two-stage baselines on the new data', so the expos\u00e9 contradicts itself. The decision problem has to be fixed before baselines can be built, and that is now overdue. Major, not critical, because the expos\u00e9 already budgets time to re-establish the baselines."
+    }
+   },
+   {
+    "id": "claims-8",
+    "title": "Case Study 1's strongest cheap decision-aware result, a tuned commitment quantile, is missing from the baseline list",
+    "severity": "minor",
+    "evidence": "e2_quantile_sweep.csv: a fixed q = 0.55 gives 149.06 EUR/day, which report.tex:545 says beats all five policies (on a 120-day sample vs 200 days for the policies, so the comparison is not like-for-like). Expos\u00e9 Sec. 5 lists baselines as CQR quantile model, point forecast and oracle. The proposed cost-weighted quantile loss is essentially a learned version of this.",
+    "recommendation": "Add 'point/quantile model plus tuned commitment quantile' as a baseline. Without it, any DFL gain may only reproduce what the q-sweep already captures cheaply.",
+    "verification": {
+     "id": "claims-8",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Verified. e2_quantile_sweep.csv gives q = 0.55 at 149.06 EUR/day on 120 days, and report.tex:545 says it beats all five policies (those were run on a 200-day sample, so the comparison is not like-for-like). The Sec. 5 baselines leave out a tuned fixed quantile. The expos\u00e9 does name a cost-weighted quantile loss as a 'cheap baseline', which partly covers this, so minor is right."
+    }
+   },
+   {
+    "id": "claims-9",
+    "title": "Small presentational inaccuracies",
+    "severity": "minor",
+    "evidence": "The HTML <title> reads 'Expos\u00e9 \u00b7 Case Study 2' (Expose_Master's_Thesis.html:5). 'German generation data' is the national OPSD aggregate, not a plant. The expos\u00e9's 'leakage-safe feature construction verified by an adversarial test' is accurate (tests/test_no_leakage.py:35), but the test only covers feature construction, which Sec. 5 Reproducibility already acknowledges.",
+    "recommendation": "Fix the title tag. Describe the data as the national aggregate.",
+    "verification": {
+     "id": "claims-9",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Line 5 of the HTML reads '<title>Expos\u00e9 \u00b7 Case Study 2 \u00b7 ...'. 'German generation data' refers to the national OPSD aggregate. These are cosmetic issues."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "dfl_technical",
+  "strengths": [
+   "The dispatch problem is a clean, fully specified two-stage LP: stage 1 is the hourly net grid exchange g (gp, gm >= 0, dispatch.py:153), and stage 2 is per-scenario battery recourse plus imbalance (c, d, soc, up, dn, dispatch.py:154-155). Settlement re-solves stage 2 with g frozen (evaluate_commitment, dispatch.py:220-283). Because of this, every DFL loss can be defined exactly as realised settled cost, with no proxy needed.",
+   "Settlement is honest: the schedule is chosen without pv_actual, the terminal-SoC obligation is enforced in settlement as well as in commitment (policies.py:136-144), and an oracle defines regret (dispatch.py:286-292). This is exactly the regret definition DFL papers use, so results will be comparable with the literature.",
+   "The structure is convex: settled cost is a convex, piecewise-linear function of g for fixed realised PV, and HiGHS returns duals. A subgradient of realised cost with respect to the committed schedule is therefore available almost for free. That opens a cheap, exact route to decision-focused training that the expos\u00e9 has not noticed yet.",
+   "The staged risk design in the expos\u00e9 (Sec. 5, last paragraph, and Sec. 6) correctly names the zero-gradient problem of differentiating an LP and orders the work so that a thesis exists even if the layer fails.",
+   "The expos\u00e9 frames a negative result as acceptable (Sec. 7, last paragraph). That is the right stance, because the analysis below suggests DFL headroom on this problem is narrow and confined to specific regimes.",
+   "The penalty-by-storage sensitivity grid (results/e2_sensitivity.csv) already exists. It is the right axis on which to look for DFL advantage, because storage coupling is the only place where pinball-at-the-right-quantile stops being decision-optimal."
+  ],
+  "notes": "The optimisation problem as implemented (dispatch.py), at S=40 and T=24: decision variables are the stage-1 net exchange g = gp - gm (24 values), plus stage-2 c, d, soc, up and dn for each scenario and hour. The objective is the DA cost (120/220 import, -45 export) plus the expected imbalance cost (300*up + 90*dn), with CVaR as an option. The forecast enters ONLY the right-hand side of the energy balance (load - pv). Storage couples the hours in stage 2, and that recourse is anticipative. The terminal-SoC constraint applies both in commitment and in settlement.\n\nRecommended formulation sequence, with today at about week 6-7:\n(0) Weeks 7-8: decide the settlement model (stylised dual-price, or real single-price reBAP with position limits); add non-anticipative settlement; fix the per-hour tau_t fractile.\n(1) Weeks 8-9: strongest two-stage baseline, i.e. CQR+ACI with per-hour tau_t commitment (tuned on validation only), plus a tuned stochastic program; regenerate the e2 numbers from one provenance.\n(2) Weeks 9-10: tau_t-weighted pinball, and the exact-equivalence check at battery=0. This is the 'cheap arm' and it is a sanity test: DFL is approximately 0 there.\n(3) Weeks 10-13: linear decision ERM through the settlement LP (a single convex program with HiGHS). This is the main DFL result and the hindsight-optimal linear reference. Optionally add subgradient training of a small nonlinear model using settlement duals for d cost/d g.\n(4) Weeks 14-17, optional and time-boxed: a regularised differentiable layer (deterministic-equivalent or a small fixed-quantile scenario set, cvxpylayers/PyEPO). Benchmark compute in week 8 first.\n(5) SPO+ only if real prices are treated as the uncertain cost vector; otherwise cite it as inapplicable, with the reason.\n\nThe working check is in /private/tmp/claude-501/-Users-dev-Agentic-Workflows--case-study-1/9b2f0ec1-2cc3-4f43-8621-018e18500569/scratchpad/nv.py, which confirms the 0.538 off-peak fractile and the g=0 kink at peak. No repo files were modified. Two claims are flagged for the student to verify: the exact current German imbalance-pricing rules, and the Hu/Lee/Lee citations.",
+  "findings": [
+   {
+    "id": "dfl_technical-01",
+    "title": "SPO+ does not apply as stated: the uncertain quantity (PV) enters the constraint right-hand side, not the objective cost vector",
+    "severity": "critical",
+    "evidence": "Actual problem: min_g,x  p_imp^T gp - p_exp*1^T gm + sum_s w_s (300*1^T up_s + 90*1^T dn_s)  s.t. for all s,t: gp_t - gm_t + d_st - c_st + up_st - dn_st = load_t - pv_st (dispatch.py:100-110); SoC dynamics soc_st = soc_s,t-1 + 0.95 c_st - d_st/0.95 (dispatch.py:112-123); box bounds on c, d, soc (dispatch.py:76-90); terminal soc_sT >= soc_init (dispatch.py:173-177). Objective coefficients are fixed tariff constants (dispatch.py:190-200, configs/default.yaml:38-44); the forecast appears only in b = load - pv (dispatch.py:103). Elmachtoub & Grigas's SPO+ assumes min_{w in S} c^T w with an uncertain c and a known, fixed feasible region S. Here c is known and the feasible region of the recourse moves with PV, so the SPO+ surrogate and its Fisher-consistency result do not transfer. The expos\u00e9 says SPO+ 'is convex and has consistency guarantees for linear objectives' (Sec. 4 and Sec. 5) and plans weeks 10-13 for it (Sec. 6) without addressing this mismatch.",
+    "recommendation": "Decide now, and in writing to the supervisor: either (a) drop SPO+ as a co-equal arm, or (b) reformulate it honestly. Option (b-i): once real prices are introduced, make PRICES the predicted cost vector (DA and imbalance price, with PV fixed or forecast separately). That is a genuine SPO+ setting, but it is a different research question. Option (b-ii): keep PV and use a method designed for uncertain constraint parameters, such as the Predict+Optimize work on unknown constraint parameters by Hu, Lee & Lee (AAAI 2023 and NeurIPS 2023; verify the exact citations), or the Donti et al. (2017) task-based loss, whose power-scheduling example is structurally this very problem. Option (b-iii): use the LP dual Q(g;pv) = max_{lambda in Lambda} lambda^T(load - pv - g) to express the recourse value as linear in pv, which gives a 'cost-vector' interpretation only for the dual. Use (b-iii) only if a supervisor insists on SPO+, and state that the consistency theorem does not carry over. Free the weeks 10-13 slot for the direct-ERM arm (finding 06).",
+    "verification": {
+     "id": "dfl_technical-01",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The technical point holds. In dispatch.py:100-110 the forecast enters only b = load - pv (line 103). The objective coefficients are fixed tariff constants (dispatch.py:190-200). SPO+ (Elmachtoub & Grigas) assumes an uncertain cost vector over a known feasible set, so the expos\u00e9's wording ('convex ... consistency guarantees for linear objectives', Sec. 4/5) does not carry over. Critical is too strong, though. The expos\u00e9's staged design (cost-weighted loss in weeks 7-9, then SPO+ in weeks 10-13, then layer) means this endangers one 4-week arm, not the thesis. It should be fixed or reframed early: major."
+    }
+   },
+   {
+    "id": "dfl_technical-02",
+    "title": "The newsvendor fractile in the code is wrong; the true decision quantile is hour- and regime-dependent (0.35 / 0.54 / 0.80), not 0.667",
+    "severity": "critical",
+    "evidence": "policies.py:167-169 computes cu = 300 - 120 and co = 90, giving 0.667, and the report repeats this (report.tex:545, 563). In the actual LP, over-committing import costs the DA price PLUS the 90 spill penalty, because dn is charged on top of energy already bought. Under-committing costs 300 minus the DA price. Setting the derivative of expected cost in g to zero gives F_N(g*) = (penalty_up - p_DA)/(penalty_up + penalty_down) for net load N = load - pv. The implied PV quantiles are: off-peak import 1 - 180/390 = 0.538; peak import 1 - 80/390 = 0.795; export regime (g<0, revenue 45) 1 - 255/390 = 0.346. There is also a kink at g=0 between import and export, where the optimum can sit for a range of distributions. I checked this numerically with solve_commitment on a negligible battery and 400 uniform scenarios: the hour-12 off-peak commitment sits at PV quantile 0.538, and the hour-18 peak commitment sits at the g=0 kink (implied quantile 0.712, which lies between 0.346 and 0.795). Script: /private/tmp/claude-501/-Users-dev-Agentic-Workflows--case-study-1/9b2f0ec1-2cc3-4f43-8621-018e18500569/scratchpad/nv.py. The empirical sweep optimum q=0.55 (results/e2_quantile_sweep.csv) matches the corrected off-peak fractile. The report's storage-based explanation for the gap (report.tex:563) is therefore probably wrong. It also follows that the 'conservative' fixed q=0.25 policy (policies.py:96) points in the wrong direction under this tariff.",
+    "recommendation": "Fix newsvendor_quantile to return per-hour, per-regime fractiles, and correct the report's explanation. This matters directly for the thesis: with no storage, the problem decouples into 24 newsvendors, and the realised cost per hour equals a scaled pinball loss at tau_t (with an extra kink at 0). Pinball loss at hour-specific tau_t is therefore EXACTLY the decision-focused loss for battery = 0. The planned 'cost-weighted quantile loss' (expos\u00e9 Sec. 5) is not a cheap approximation there; it is the exact DFL objective, and no DFL method can beat a well-fitted tau_t-quantile model at zero storage except through finite-sample or misspecification effects. State this as a theoretical result in the thesis. It sharpens the research question to: when does DFL beat the best tau_t-quantile two-stage pipeline?",
+    "verification": {
+     "id": "dfl_technical-02",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "I recomputed the math and it is correct. Under the code's g = gp - gm, the over-commit cost is p_DA + 90, not 90. That gives a net-load fractile of (300 - p)/390, so the PV quantiles are 0.538 off-peak, 0.795 peak and 0.346 export. policies.py:167-169 uses co = 90 (giving 0.667), and report.tex:545 and the fig:sweep caption repeat it, so the storage-based explanation is likely wrong. The empirical optimum 0.55 (e2_quantile_sweep.csv) matches 0.538. However, newsvendor_quantile is only a diagnostic, used in e2_dispatch.py:246 for a plot line. No policy depends on it, so the thesis's validity is not threatened. One caveat on the battery = 0 'exact DFL = pinball at tau_t' claim: the regime (import or export) depends on g itself, so the loss is pinball only within a regime, plus the kink. Severity major, not critical."
+    }
+   },
+   {
+    "id": "dfl_technical-03",
+    "title": "Moving to real settled imbalance prices removes the asymmetric-penalty premise (German single-price reBAP) and makes the decision price-driven",
+    "severity": "critical",
+    "evidence": "The expos\u00e9's motivation (Sec. 2, first paragraph) and its methodology (Sec. 5, 'Data'; Objective 3) assume asymmetric settlement: short at a punitive price, long for little. The CS1 tariff hard-codes this (configs/default.yaml:42-43; dispatch.py:196-197). German imbalance settlement (reBAP), and EU-harmonised imbalance pricing generally, is single-price: long and short deviations settle at the same price, though this should be verified for the zones and years used. Expected deviation cost is then roughly (reBAP - DA) times the deviation. That is linear in g, so the LP optimum becomes bang-bang or speculative, set by the sign of E[reBAP - DA | x], and it is unbounded without position limits. A further complication: the site PV is the national DE capacity factor rescaled to 2 MW (policies.py:58-60), so the site's forecast error IS the national solar forecast error. That error is a main driver of system imbalance and therefore of reBAP. Price and PV error are strongly dependent, and treating them independently is wrong. The expos\u00e9's weeks 3-4 (price acquisition) should already be finished by now (about week 6-7).",
+    "recommendation": "Before re-establishing baselines, decide the settlement model and write it down: (i) keep a stylised dual-price tariff (transparent, newsvendor structure intact, DFL question well-posed); (ii) use real single-price settlement with explicit position limits and a joint PV-price model (a harder problem, where the uncertain cost vector is price-driven); or (iii) report both. Do not mix real DA prices with a synthetic asymmetric imbalance penalty without saying so explicitly. If real reBAP is used, model its dependence on the national PV error. This dependence is the single most plausible source of a genuine DFL advantage, because a cost-trained model can learn to shade the forecast in exactly the hours where error and price co-move. A scoring-rule-trained marginal PV model cannot.",
+    "verification": {
+     "id": "dfl_technical-03",
+     "verdict": "confirmed",
+     "severity": "critical",
+     "reason": "The expos\u00e9 motivates the work with asymmetric settlement (Sec. 2). It also plans to replace the tariff with 'settled day-ahead and imbalance prices' (Sec. 3/5) and to headline results 'in euros on settled market prices' (Sec. 7). German reBAP is a single symmetric imbalance price, and EB GL harmonisation favours single pricing. So real settlement removes the asymmetric-newsvendor structure, and the commitment LP (gp >= 0 with no upper bound, dispatch.py:80-82) becomes price-speculative without position limits. The site PV is the national capacity factor times 2 MW (policies.py:58-60), so the site's error is the national solar error, which co-moves with system imbalance. The expos\u00e9's fallback (keep the synthetic tariff where data are missing) does not address this, because it assumes the problem is merely data availability. This is a design-level decision that must come first."
+    }
+   },
+   {
+    "id": "dfl_technical-04",
+    "title": "Stage-2 recourse is anticipative: the battery sees the whole day's realised PV at hour 0",
+    "severity": "major",
+    "evidence": "evaluate_commitment solves one LP over all 24 hours with the full realised pv vector (dispatch.py:240-263). In solve_commitment, each scenario's recourse (c, d, soc, up, dn indexed by s,t; dispatch.py:154-155) likewise optimises with perfect knowledge of the scenario's whole path. Real intraday battery operation is non-anticipative, because it knows PV only up to t. This overstates the value of storage. That matters for DFL in particular: the analysis in finding 02 shows DFL can only beat a tau_t-quantile pipeline through storage coupling, which is exactly the part of the model this bias inflates (report.tex:793 attributes the storage effect to recourse).",
+    "recommendation": "Before DFL experiments, add a non-anticipative settlement option: a rolling-horizon re-solve, or at minimum a causal greedy battery rule that uses PV only up to t. Report the CS1 storage-grid result under both settlements. If the storage-driven gap shrinks, the DFL headroom shrinks with it, and that is better known in week 7 than in week 17. The training loss should use the same settlement as the evaluation.",
+    "verification": {
+     "id": "dfl_technical-04",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "evaluate_commitment builds a single 24-hour LP with the full realised pv vector and a frozen schedule (dispatch.py:240-263). The scenario recourse in solve_commitment is per-scenario and full-path as well. Battery settlement is therefore anticipative, and it inflates storage value, which report.tex:793 credits to recourse. Major is appropriate."
+    }
+   },
+   {
+    "id": "dfl_technical-05",
+    "title": "The differentiable-layer plan underestimates problem size, the non-differentiable scenario generator, and the regularisation needed",
+    "severity": "major",
+    "evidence": "At S=40, T=24, one commitment LP has 2T + 5ST = 4,848 variables and 2ST = 1,920 equalities, plus 40 terminal and up to 41 CVaR rows (dispatch.py:153-186). A cvxpylayers/diffcp backward pass at this size per day, over roughly 700 training days per fold, across epochs, rolling folds, the 4x4 sensitivity grid, and several zones, is days of compute. OptNet/qpth uses dense KKT systems and does not scale to it. The LP solution is piecewise constant in pv, so the Jacobian dg/dpv is zero almost everywhere. A quadratic term (Wilder et al. 2019), a log-barrier/interior-point relaxation (Mandi & Guns 2020), or perturbed optimisers (Berthet et al. 2020) are required, and each changes the decision being learned. Upstream, scenarios_from_quantiles uses np.sort, np.interp at random uniforms, and clip (policies.py:49-55). Gradients through this are noisy, and the copula weight common_factor=0.75 is a fixed, untuned constant (policies.py:34). The expos\u00e9 (Sec. 5) names the zero-gradient issue but none of these remedies, and it gives no compute budget.",
+    "recommendation": "If the layer arm is kept, scope it down. Use a deterministic-equivalent layer: one quantile path in, battery-aware schedule out, about 120 variables per day, with a small quadratic regulariser on g. Alternatively, use S of at most 8 fixed-quantile scenarios (no random sampling) so the map from quantiles to scenarios is a fixed linear map. Batch days with cvxpylayers and SCS, or use PyEPO. Benchmark one forward/backward pass in week 8 and extrapolate the full compute before committing weeks 14-17. Also note an alternative: the gradient of realised cost with respect to g is available exactly from the settlement LP duals, so the commitment layer only needs differentiating if the model outputs a forecast rather than a decision (see finding 06).",
+    "verification": {
+     "id": "dfl_technical-05",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "I verified the counts: 2T + 5ST = 48 + 4800 = 4848 variables and 2ST = 1920 equalities, plus 40 terminal and 41 CVaR rows. scenarios_from_quantiles uses sort, interp at random uniforms and clip, with fixed common_factor = 0.75 (policies.py:29-55). The expos\u00e9 names no smoothing remedy and no compute budget (Sec. 5 only says 'differentiable convex optimisation layer'). It does acknowledge layer instability as a risk and sequences around it, which keeps this at major rather than higher."
+    }
+   },
+   {
+    "id": "dfl_technical-06",
+    "title": "Missing arm: direct decision ERM with a linear model is a single convex LP and is the natural DFL method here (ridge was the best CS1 model)",
+    "severity": "major",
+    "evidence": "Ridge with about 55 features and residual-quantile intervals (models/baselines.py:85-133) has the best CRPS in CS1 (results/e1_leaderboard.csv: ridge raw CRPS 0.0304, ahead of gbm_quantile and lstm_quantile), and report.tex:573 cites ridge[cqr] as the cheapest model to act on. The features carry a mostly linear signal, the data are NWP-free, and there are only about 700 training days per fold. A high-capacity network trained on a 24-hour cost signal would be badly data-starved. Because settled cost is convex and piecewise linear in g for a given realised PV (finding 02), parameterising g_d,t = theta_h^T x_d,t (or pv_hat = theta^T x fed into a fixed deterministic dispatch) and minimising sum_d SettledCost(g_d; pv_d) + lambda*||theta||^2 is ONE convex LP/QP. It contains about 700 x 24 x 5 recourse variables (roughly 84k) and is solvable by HiGHS in seconds to minutes. This is the 'big-data newsvendor' / integrated ERM approach (Ban & Rudin 2019, Operations Research) extended with battery recourse. It finds the globally optimal decision-focused linear model, with no surrogate and no zero-gradient issue.",
+    "recommendation": "Make this the main DFL arm for weeks 10-13, replacing SPO+. Implement it by reusing _core_constraints with a decision rule in place of free g. It gives an exact upper reference: the best linear decision rule in hindsight on the training data. Any gradient-based layer method must approach it on the linear class, which makes it an internal validity check. Add features or a small nonlinear model only if ERM-linear clearly beats the tau_t-quantile baseline and residual analysis shows structure the linear model misses. Report model capacity explicitly as a factor: with ridge as the CS1 winner, expect DFL gains to come from re-targeting the bias and quantile level, not from representation.",
+    "verification": {
+     "id": "dfl_technical-06",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Ridge has the best CRPS (raw 0.0302, cqr 0.0305; e1_leaderboard.csv) and the lowest regret, 144.3 (e2_by_model.csv). With battery recourse, settled cost for a fixed pv is an LP value function with g in the RHS, so it is convex in g. A linear decision rule therefore yields one convex LP, which makes the ERM argument sound. Caveats: this is a recommendation, not a defect. Its 'global optimum' inherits the anticipative-settlement bias from finding 04, and its scale (about 84k recourse variables, plus SoC constraints) should be benchmarked. Major as a missing strong arm is acceptable."
+    }
+   },
+   {
+    "id": "dfl_technical-07",
+    "title": "The planned baselines are too weak: the 'strongest two-stage baseline' is not the stochastic program but a tuned, hour-specific quantile policy",
+    "severity": "major",
+    "evidence": "The expos\u00e9 (Sec. 5, 'Baselines') proposes to retain the CS1 configurations 'unchanged': a conformalised quantile model, a point forecast, and the oracle. CS1's own numbers show these are not the strongest two-stage opponent. A single fixed q=0.55 gives regret 149.06 EUR/day (results/e2_quantile_sweep.csv; report.tex:545), against 159.82 for the stochastic program and 164.71 for point (results/e2_summary.csv). That figure was obtained by sweeping on the test days, so it is optimistic. Per finding 02, the optimal level differs by hour and regime (0.35 / 0.54 / 0.80), so a per-hour tau_t policy should do better still. The headroom is already small: stochastic beats point by only 3.0% (e2_summary.csv). A DFL model compared against point or stochastic would 'win' partly by finding the right quantile, which is a two-stage fix and not a DFL contribution.",
+    "recommendation": "Define the strongest two-stage baseline as follows. (1) Fit the CQR quantile model. (2) Apply ACI online recalibration (the CS1 result in e3_aci.csv). (3) Commit at analytically derived per-hour tau_t, or a tau_t vector tuned on a validation slice, never on test days. (4) Also run a stochastic program with tuned scenario dependence (common_factor) and tau_t-consistent marginals. Report DFL gains relative to the better of the two. The expos\u00e9's research question (Sec. 3) should be read as 'beyond the best tau_t-quantile pipeline'. Also re-run the e2 by-model table: ridge is missing from results/e2_by_model.csv even though report.tex:573 cites ridge regret values, so the numbers to beat need regenerating from one provenance.",
+    "verification": {
+     "id": "dfl_technical-07",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The core claim holds. The sweep's q = 0.55 regret of 149.06 beats stochastic (159.82) and point (164.71) (e2_summary.csv), and stochastic beats point by only 2.97%. The sweep reuses the evaluation days (e2_dispatch.py:244, a subset of up to 120 days), so it is optimistic. The expos\u00e9 retains the baselines 'unchanged' (Sec. 5). One sub-claim is false, however: ridge is NOT missing from results/e2_by_model.csv. Rows 18-19 contain ridge[cqr] at 144.32 and ridge[raw] at 144.82, matching report.tex:573. Drop the 'regenerate from one provenance' justification. Also note that the ridge regret of 144 is below the sweep's 149, so the stochastic summary row is not even the best existing number to beat."
+    }
+   },
+   {
+    "id": "dfl_technical-08",
+    "title": "The 'cost-weighted quantile loss' is undefined, and the conditions under which DFL can win are not stated",
+    "severity": "major",
+    "evidence": "Sec. 5 calls it 'a cost-weighted quantile loss, which needs no differentiable solver' and gives no formula. Given finding 02, the natural definition is pinball at tau_t with weight (penalty_up + penalty_down), plus a kink term at g=0. That is exact DFL at battery 0, so this arm and 'DFL' coincide there. DFL can strictly beat it only through: (i) intertemporal battery coupling, under which per-hour quantiles stop being optimal because the battery shifts which hour's error matters; (ii) the import/export kink; (iii) day-varying or uncertain prices, under which tau becomes stochastic and correlated with the error (finding 03); (iv) a terminal-SoC obligation; (v) misspecification of the quantile model. With anticipative recourse (finding 04), the size of (i) is inflated. results/e2_sensitivity.csv shows the stochastic-vs-point advantage is non-monotone and strongly regime-dependent (2.7% to 67%).",
+    "recommendation": "Write the loss explicitly in the methods chapter and prove or state the battery=0 equivalence. Then frame the hypotheses as: DFL advantage is about 0 at battery=0 under a fixed tariff, and grows with storage size and price variability and with price-error correlation. Test these hypotheses on the existing penalty-by-storage grid, extended with a price-variability axis. This turns a possibly null result into a clean, predicted, mechanism-level finding.",
+    "verification": {
+     "id": "dfl_technical-08",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "The expos\u00e9 names the 'cost-weighted quantile loss' with no formula (Sec. 3/5) and states no conditions under which DFL can win. e2_sensitivity.csv indeed ranges from 2.7% (600/0) to 67.5% (150/2) and is non-monotone. The mechanism list is sound, subject to the same caveat as finding 02: at battery = 0 the equivalence is pinball within each import or export regime, plus the kink at g = 0."
+    }
+   },
+   {
+    "id": "dfl_technical-09",
+    "title": "Risk-averse (CVaR) and calibration interactions with DFL are not scoped",
+    "severity": "minor",
+    "evidence": "solve_commitment supports a CVaR blend (dispatch.py:141-200), and CS1 found both risk-averse policies cost more in total (results/e2_summary.csv: cvar regret 198.4, quantile 207.7, point 164.7). Sub-question 3 plans conformal calibration on top of decision-trained models. For a model trained to output a decision quantile tau_t directly, 'calibration' must be defined at that single level per hour. Full-interval coverage is not even defined for an ERM decision rule that outputs g.",
+    "recommendation": "Train DFL against the risk-neutral expected-cost objective only. Leave CVaR as a footnote, since CS1 shows it is cost-dominated under this tariff. For the calibration audit, define coverage at the decision level (empirical P(pv <= committed quantile) against tau_t, by hour and by month). Apply ACI to that single level instead of to 90% intervals.",
+    "verification": {
+     "id": "dfl_technical-09",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "The numbers check out against e2_summary.csv: cvar regret 198.4, quantile 207.7 and point 164.7, so both risk-averse policies cost more. Sub-question 3 (calibration on top of decision-trained models) is underspecified for a model that outputs a decision. This is a reasonable scoping note, and minor is the right severity."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "literature",
+  "strengths": [
+   "All 12 references in expos\u00e9 section 8 exist, and the authors, year and venue are essentially correct. I spot-checked each one. Elmachtoub & Grigas, Mgmt Sci 68(1):9-26, doi 10.1287/mnsc.2020.3922: correct. Gneiting & Katzfuss, ARSIA 1:125-151: correct. Hong et al., IJF 32(3):896-913: correct. Pinson, Chevallier & Kariniotakis, IEEE TPWRS 22(3):1148-1156: correct. Morales et al. 2014, Springer, doi 10.1007/978-1-4614-9411-9: correct. Mandi et al., JAIR vol. 80, pp. 1623-1701, doi 10.1613/jair.1.15320: matches DBLP; arXiv's journal-ref says vol. 81, which is the outlier. Agrawal 2019 (NeurIPS 32), Amos & Kolter 2017 (ICML), Donti 2017 (NeurIPS 30), Romano 2019 (NeurIPS 32) and Gibbs & Cand\u00e8s 2021 (NeurIPS 34): all correct. The only bibliographic error is in Yu et al. (2024); see the minor finding.",
+   "The core lineage is cited correctly and is the right one: newsvendor-style quantile bidding (Pinson 2007), stochastic programming for renewables (Morales 2014), scoring rules (Gneiting & Katzfuss, GEFCom2014), conformal methods (CQR, ACI), and DFL foundations (SPO+, OptNet, cvxpylayers, Donti task-based learning, the Mandi survey). Few master's expos\u00e9s have a reference spine this clean.",
+   "The research questions on what is sacrificed (calibration and coverage of decision-trained models), on drift, and on cross-zone portability are in fact under-studied in the value-oriented renewable forecasting literature I found. Most papers (Carriere 2019, Stratigakos 2022, Zhang 2024, Wahdany 2023) report cost only, on one site and a fixed split. This is where the thesis's real novelty can be placed.",
+   "The expos\u00e9 already anticipates the hardest technical risk, the zero gradient almost everywhere when differentiating through an LP (\u00a75), and it states an honest negative outcome (\u00a77). Both match what the DFL literature warns about.",
+   "The plan to replace the synthetic tariff with settled day-ahead and imbalance prices addresses the most common weakness of DFL energy papers: synthetic or IEEE-bus test cases (Zhang et al. 2022 use IEEE 30-bus; Yu et al. 2024 use IEEE test systems)."
+  ],
+  "notes": "I checked all 12 references in expos\u00e9 \u00a78 against web sources. The only bibliographic error is in Yu et al. 2024. I have medium-high confidence in the NeurIPS/ICML entries, which match my knowledge and are standard; the journal entries were confirmed by search. I could not confirm the venue of Sang et al. (journal version vs arXiv:2305.00362), so check it on IEEE Xplore before citing.\n\nThe most urgent points:\n- **Gap statement:** it overclaims and must be reworded. Suggested wording is in literature-gap-claim-overstated.\n- **SPO+:** it does not fit the inherited LP, because the forecast is on the RHS (src/riskaware_pv/decision/dispatch.py:101-103). This should be decided before the planned weeks 10-13.\n- **Newsvendor equivalence:** at zero storage, the 'cost-weighted quantile loss' is already the exact decision loss, so DFL gains can only come from storage coupling and time-varying price ratios.\n\nThe defensible novelty is the combination of a calibration/coverage audit of decision-trained models, conformal recalibration on top, robustness to drift and retraining, and cross-zone transfer under real settlement rules, all run under a leakage-audited rolling-origin protocol. The prior trading-DFL papers I found largely do not report these.\n\nMain sources: hal.archives-ouvertes.fr/hal-02124851 (Carriere 2019); arxiv.org/abs/1907.07580 (Mu\u00f1oz 2020); hal.archives-ouvertes.fr/hal-03330017 (Stratigakos 2022); repository.tudelft.nl (Wahdany 2023); arxiv.org/abs/2309.00803 and 2405.09004 (Zhang 2024); arxiv.org/abs/2107.01861 (cost-oriented load forecasting); arxiv.org/abs/2305.00362 (Sang); arxiv.org/abs/2401.03680 (Li et al. review); arxiv.org/abs/2206.14234 (PyEPO); dblp.org/rec/journals/jair/MandiKBMBGF24; bohrium record for Yu et al. 2024; arxiv.org/abs/2512.06600; arxiv.org/abs/2503.16107.\n\nI did not modify any repo files.",
+  "findings": [
+   {
+    "id": "literature-gap-claim-overstated",
+    "title": "The novelty/gap statement does not hold: value-oriented and decision-focused forecasting for renewable trading has been published since 2019",
+    "severity": "critical",
+    "evidence": "Expos\u00e9 \u00a72 (HTML line 293) says DFL is 'still demonstrated mainly on small or synthetic problems, and the renewable-forecasting literature continues to evaluate models by scoring rule'. \u00a74 (lines 337-338) says DFL is 'not yet standard for day-ahead market commitment' and that 'the energy forecasting literature optimises scoring rules'. The only energy-DFL paper cited is Yu et al. (2024), on preventive dispatch under abnormal weather. Web checks found a direct line of prior work on exactly this problem, mostly with real market data:\n(1) Carriere, T., & Kariniotakis, G. (2019). An integrated approach for value-oriented energy forecasting and data-driven decision-making: Application to renewable energy trading. IEEE Transactions on Smart Grid, 10(6), 6933-6944. doi:10.1109/TSG.2019.2914379.\n(2) Mu\u00f1oz, M. A., Morales, J. M., & Pineda, S. (2020). Feature-driven improvement of renewable energy forecasting and trading. IEEE Transactions on Power Systems, 35(5), 3753-3763. doi:10.1109/TPWRS.2020.2975246. Newsvendor LP trained on cost, real DK1 data.\n(3) Stratigakos, A., Camal, S., Michiorri, A., & Kariniotakis, G. (2022). Prescriptive trees for integrated forecasting and optimization applied in trading of renewable energy. IEEE Transactions on Power Systems, 37(6), 4696-4708. doi:10.1109/TPWRS.2022.3152667. Day-ahead trading.\n(4) Stratigakos, A., Michiorri, A., & Kariniotakis, G. (2021). A value-oriented price forecasting approach to optimize trading of renewable generation. IEEE PowerTech 2021.\n(5) Wahdany, D., Schmitt, C., & Cremer, J. L. (2023). More than accuracy: End-to-end wind power forecasting that optimises the energy system. Electric Power Systems Research, 221, 109384. doi:10.1016/j.epsr.2023.109384.\n(6) Zhang, Y., Jia, M., Wen, H., Bian, Y., & Shi, Y. (2024). Toward value-oriented renewable energy forecasting: An iterative learning approach. IEEE Transactions on Smart Grid. doi:10.1109/TSG.2024.3503554.\n(7) Zhang, Y., Wen, H., Bian, Y., & Shi, Y. (2024). Improving sequential market coordination via value-oriented renewable energy forecasting. arXiv:2405.09004. Derives an analytical piecewise-linear DA+RT cost loss.\n(8) Zhang, J., Wang, Y., & Hug, G. (2022). Cost-oriented load forecasting. Electric Power Systems Research, 205, 107723. doi:10.1016/j.epsr.2021.107723.\n(9) Sang, L., Xu, Y., Long, H., Hu, Q., & Sun, H. Electricity price prediction for energy storage system arbitrage: A decision-focused approach. arXiv:2305.00362. Venue reported as IEEE Trans. Smart Grid (2022); I could not confirm this online, so check it on IEEE Xplore before citing.\n(10) Li, R., et al. (2024). Decision-oriented (decision-focused) learning for future power system decision-making under uncertainty. arXiv:2401.03680. A review co-authored by Pineda and Kariniotakis.\nAlso relevant, from 2025-26: Smets & Delarue (2025), DFL price forecasting for storage in the day-ahead market (TU Delft repository), and Tapia, Castellano, Mallada & Dvorkin, arXiv:2512.06600 (end-to-end storage arbitrage).\nOn the 'small or synthetic' claim: the Mandi et al. (2024) benchmark itself includes an energy-cost-aware scheduling problem built on real electricity prices.",
+    "recommendation": "Rewrite \u00a74 and the gap paragraph now, before more implementation is done. The original weeks 1-2 literature phase has already passed. Add a 'Value-oriented forecasting for renewable trading' paragraph built on (1)-(9), and cite the Li et al. review as the field overview. Replace the gap statement with something defensible, for example: 'Value-oriented and decision-focused forecasting for renewable trading has been demonstrated, mostly for single sites, a single market, fixed train/test splits, and with cost as the only reported metric (Carriere & Kariniotakis, 2019; Mu\u00f1oz et al., 2020; Stratigakos et al., 2022; Zhang et al., 2024). It remains open how (a) different DFL formulations compare against a strong, calibrated two-stage baseline under the same leakage-audited rolling-origin protocol, (b) what decision-focused training costs in calibration and interval validity, and whether conformal recalibration recovers it, (c) whether the advantage persists under drift and retraining, and (d) whether it transfers across bidding zones with different settlement rules.' Drop 'the renewable-forecasting literature continues to evaluate models by scoring rule'. At most say 'scoring rules remain the dominant evaluation practice (Hong et al., 2016)'. Drop 'mainly on small or synthetic problems', or limit it to the generic DFL benchmark literature.",
+    "verification": {
+     "id": "literature-gap-claim-overstated",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The substance is correct. Expos\u00e9 \u00a72 says DFL is shown 'mainly on small or synthetic problems' and that the renewable literature 'continues to evaluate models by scoring rule'. \u00a74 adds 'the energy forecasting literature optimises scoring rules'. Neither claim holds against the existing work. I confirmed Carriere & Kariniotakis (2019, IEEE TSG 10(6), 6933-6944, doi 10.1109/TSG.2019.2914379), which covers value-oriented PV and wind day-ahead trading on market revenue. Mu\u00f1oz/Morales/Pineda 2020, Stratigakos 2022 and Wahdany 2023 are well-known real papers on the same problem, and the only energy-DFL paper the expos\u00e9 cites (Yu 2024) is off-topic. The severity is inflated, though. This is a framing and literature-review defect that is fixed by rewriting \u00a72/\u00a74 and narrowing the claimed gap. It does not threaten the thesis's validity or feasibility: an M.Sc. thesis does not need first-of-its-kind novelty, and the empirical questions (calibration cost, drift, cross-zone transfer, a strong conformal two-stage baseline) remain defensible. It is still a major item to fix now, because examiners will catch it immediately. I did not individually re-verify items (6)-(10)."
+    }
+   },
+   {
+    "id": "literature-spo-plus-not-applicable",
+    "title": "SPO+ assumes the predicted quantity sits in a linear objective, but here the PV forecast enters the right-hand side of the balance constraints",
+    "severity": "critical",
+    "evidence": "Expos\u00e9 \u00a73 (line 309, line 318), \u00a74 (line 336), \u00a75 (line 350) and \u00a76 (weeks 10-13, line 370) make SPO+ one of the three core arms. Elmachtoub & Grigas (2022) define SPO/SPO+ for min_w c^T w with c predicted and the feasible set fixed. In the repo, the forecast enters the constraints, not the cost. In src/riskaware_pv/decision/dispatch.py:101-103 the energy balance is 'b = load[t] - pv[s, t]', i.e. b_eq (RHS). The cost vector c (dispatch.py:196-197, 260-261) holds only the tariff and penalties. With uncertain RHS the feasible region moves with the forecast, so the SPO+ surrogate and its Fisher-consistency guarantee do not apply directly. PyEPO (Tang & Khalil, 2024) likewise supports only predicted objective coefficients. Zhang et al. (arXiv:2405.09004) state this limitation explicitly: pinball and SPO-type losses target single-stage problems and do not handle redispatch.",
+    "recommendation": "Decide this before week 10. Option A: reformulate. Under a fixed recourse policy the stage-2 cost can be written as a function of the forecast, and you can use the analytical piecewise-linear value-oriented loss of Zhang et al. (2024/2025), which is built for exactly this DA+RT structure with an LP recourse. Option B: replace the SPO+ arm with a method that handles RHS/constraint uncertainty. Candidates are Donti et al. (2017) task-based learning through the stochastic program; cvxpylayers with a small quadratic regulariser (Wilder, Dilkina & Tambe, 2019, AAAI 33, 1658-1665); the interior-point/log-barrier relaxation (Mandi & Guns, 2020, NeurIPS 33); perturbed optimisers (Berthet et al., 2020, NeurIPS 33); and locally learned decision losses (Shah et al., 2022, NeurIPS 35). If SPO+ stays in the plan, the thesis must explicitly derive the reformulation that puts the uncertainty into the objective and state that the consistency result no longer applies.",
+    "verification": {
+     "id": "literature-spo-plus-not-applicable",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The technical claim is confirmed. In dispatch.py:101-103 the PV forecast enters the equality right-hand side (b = load[t] - pv[s,t]), and the cost vector at dispatch.py:196-201 holds only tariffs and penalties, so no forecast-dependent objective coefficient exists for SPO+ to target. SPO+ as defined by Elmachtoub & Grigas (min c^T w with predicted c and a fixed feasible set) therefore does not apply directly. Its consistency guarantee does not carry over either, and the expos\u00e9's \u00a75 statement that SPO+ 'has consistency guarantees for linear objectives' is misapplied here. I adjusted the severity from critical to major. It affects one of three arms (weeks 10-13), the expos\u00e9's staged design keeps a reportable thesis without it, and the fix is a design decision (reformulate, or swap in a method that handles RHS uncertainty) due before week 10. It is not a threat to the thesis as a whole."
+    }
+   },
+   {
+    "id": "literature-newsvendor-equivalence",
+    "title": "Without storage, the 'cheap cost-weighted quantile loss' already is the exact decision-focused loss, which the literature has known since Pinson 2007, Gneiting 2011, and Ban & Rudin 2019",
+    "severity": "major",
+    "evidence": "The docstring in dispatch.py:14-19 states the newsvendor result itself. With linear asymmetric penalties (configs/default.yaml:42-43, 300 vs 90 EUR/MWh), the realised-cost-minimising commitment is the tau = 300/390 \u2248 0.77 quantile. The empirical risk under cost is then exactly a pinball loss at that tau. See Gneiting, T. (2011), Quantiles as optimal point forecasts, IJF 27(2), 197-207; Ban, G.-Y., & Rudin, C. (2019), The big data newsvendor, Operations Research 67(1), 90-108; Mu\u00f1oz et al. (2020). The expos\u00e9 (\u00a73 line 318, \u00a75 line 350) presents the cost-weighted quantile loss as just a 'cheap baseline' and contrasts it with 'training it on a proper scoring rule'. A scoring-rule model read off at the critical quantile is already close to decision-optimal in the zero-storage corner of the grid.",
+    "recommendation": "State the equivalence in the thesis. Then frame the DFL contribution as coming only from what the newsvendor does not capture: (i) intertemporal coupling through the battery (the storage axis of the grid), (ii) time-varying, price-dependent critical ratios once real imbalance prices are used, and (iii) scenario-based commitment against the full distribution. Expect and pre-register near-zero DFL gains at storage = 0, and use that as a sanity check. Add Bertsimas, D., & Kallus, N. (2020), From predictive to prescriptive analytics, Management Science 66(3), 1025-1044, and Sadana, U., et al. (2025), A survey of contextual optimization methods for decision-making under uncertainty, EJOR 320(2), 271-289. Both are framing references for the 'estimate-then-optimise vs integrated' taxonomy.",
+    "verification": {
+     "id": "literature-newsvendor-equivalence",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "The general point is valid: with zero storage and linear penalties, the cost-optimal commitment is a quantile and empirical cost reduces to a pinball-type loss. The specific evidence is wrong, however. The critical ratio is not 300/390 \u2248 0.77, because the commitment also carries the day-ahead price. The repo already handles this: policies.py:158-169 computes cu = penalty_up - import_price_offpeak, giving (300-120)/390 \u2248 0.46. In reality it varies by hour (peak 220 gives \u22480.21) and by sign (export at 45 gives a different ratio), with a kink at g = 0, and the forecast target is PV, so the relevant quantile is of load minus PV. The expos\u00e9 is also already aware of the newsvendor result: \u00a72 cites Pinson 2007 for the quantile bid, \u00a77 names 'choosing the commitment quantile well' as the likely negative-result explanation, and Case Study 1 already showed the storage complementarity (e2_dispatch.py:129-142). The useful residue is to state the equivalence explicitly and to pre-register near-zero DFL gains over the cost-weighted quantile at storage = 0. That is a minor framing improvement, not a major gap."
+    }
+   },
+   {
+    "id": "literature-imbalance-settlement-design",
+    "title": "With real prices, the dual-price 'punitive short / cheap long' story may not match the target markets. German reBAP and Nordic settlement are single-price",
+    "severity": "major",
+    "evidence": "Expos\u00e9 \u00a72 (opening paragraph) bases the problem on asymmetric dual-price settlement (Pinson 2007, whose setting is dual-price). Objective 3 (\u00a73) and \u00a75 'Data' plan to switch to settled day-ahead and imbalance prices across several zones. Germany's reBAP is a single imbalance price whose sign and level depend on the system imbalance, and the Nordic area moved to single pricing in 2021. Under single pricing the imbalance price is itself uncertain at gate closure. The optimal bid then depends on a joint forecast of generation and imbalance price (Zugno, J\u00f3nsson & Pinson, 2013, Trading wind energy on the basis of probabilistic forecasts both of wind generation and of market quantities, Wind Energy 16(6), 909-926; Stratigakos et al., 2021, value-oriented price forecasting). None of this literature is cited.",
+    "recommendation": "Add a short subsection on imbalance settlement design, and decide early (weeks 3-4 work is due now) which zones and settlement regimes are in scope. Also decide whether imbalance prices are treated as known ex post (realised cost only) or forecast ex ante (which would make it a joint forecasting problem). Cite Zugno et al. (2013) and Stratigakos et al. (2021) for the price-uncertainty side, and state the per-zone settlement rule in the data section. Without this, euro 'regret on real prices' figures are not comparable across zones, and the portability question (sub-question 5) gets confounded by market design.",
+    "verification": {
+     "id": "literature-imbalance-settlement-design",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Confirmed. Expos\u00e9 \u00a72 builds the problem on dual-price asymmetric settlement ('short bought back at a punitive rate, long absorbed for little'), and Objective 3 / \u00a75 plan to switch to settled imbalance prices. Germany's reBAP is a single symmetric imbalance price, the Nordic area moved to single-price settlement in November 2021, and EU harmonisation (EB GL Art. 52) pushes toward single pricing. With real prices the penalty asymmetry is therefore stochastic and sign-dependent rather than a fixed 300/90 ratio, and the commitment problem becomes partly a price-forecasting problem (Zugno et al. 2013). The expos\u00e9 and report.tex cite none of this, and the weeks 3-4 data deliverable depends on the choice. Major is appropriate."
+    }
+   },
+   {
+    "id": "literature-missing-lp-differentiation-methods",
+    "title": "The literature for the stated main technical risk (differentiating through an LP) and the standard tooling are missing",
+    "severity": "major",
+    "evidence": "Expos\u00e9 \u00a75 (risk paragraph) correctly notes the LP solution is piecewise constant with zero gradient almost everywhere. \u00a74 cites only OptNet and cvxpylayers, which require strictly convex QPs or regularisation to give useful gradients for an LP. Missing are the standard remedies and benchmarks: Wilder et al. (2019, AAAI) quadratic regularisation of LPs; Mandi & Guns (2020, NeurIPS 33) interior-point LP solving for predict+optimise; Berthet et al. (2020, NeurIPS 33) differentiable perturbed optimisers; Vlastelica et al. (2020, ICLR) black-box differentiation; Shah et al. (2022, NeurIPS) LODLs. Also missing are libraries and benchmarks: PyEPO (Tang, B., & Khalil, E. B. (2024), Mathematical Programming Computation 16(3), 297-335, doi:10.1007/s12532-024-00255-x), cvxpylayers (Agrawal et al. 2019, already cited), and the PredOpt benchmark code accompanying Mandi et al. (2024).",
+    "recommendation": "Add these in a 'Gradient estimation for LP layers' paragraph and pick the concrete approach for weeks 14-17 now. A practical default is cvxpylayers on the dispatch LP plus a small quadratic term (Wilder 2019), with scenario count kept low. Benchmark the implementation against PyEPO or the PredOpt reference implementations on one toy problem first, so a bug cannot be mistaken for a negative result.",
+    "verification": {
+     "id": "literature-missing-lp-differentiation-methods",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Confirmed. \u00a74 cites only OptNet and cvxpylayers and claims they are 'the machinery this thesis needs, since the dispatch problem here is a linear program'. For an LP these layers give zero or degenerate gradients unless the problem is regularised, which the expos\u00e9's own \u00a75 risk paragraph acknowledges. The expos\u00e9 names no remedy, though, only a fallback (the staged design). The standard remedies (Wilder 2019 quadratic smoothing, Mandi & Guns 2020 interior-point, Berthet 2020 perturbation, Vlastelica 2020, Shah 2022 LODL) and tools (PyEPO) are missing. Choosing one is a concrete technical decision needed before week 14, so major is fair. It partly overlaps with the SPO+ finding."
+    }
+   },
+   {
+    "id": "literature-framing-generator-vs-prosumer",
+    "title": "The expos\u00e9 positions the work in renewable-generator market trading, but the inherited decision model is a PV+battery prosumer exchange schedule",
+    "severity": "minor",
+    "evidence": "Expos\u00e9 \u00a72 opens with 'A renewable generator trading in the European day-ahead market'. The model the thesis extends (dispatch.py:1-12) commits a grid import/export schedule for a 'PV + battery prosumer' with peak/off-peak import prices and a feed-in price (configs/default.yaml:39-41). These are two literatures: renewable trading (Pinson, Carriere, Stratigakos, Mu\u00f1oz) versus storage and prosumer energy management (Sang et al.; Smets & Delarue 2025; Tapia et al. 2025).",
+    "recommendation": "Pick one framing and make the decision model and the related-work section agree. If you keep the prosumer/storage model, add the storage-DFL papers above and adjust the \u00a72 opening. If you move to a generator bidding model with real DA and imbalance prices, the dispatch LP needs changing, and that should be planned for now.",
+    "verification": {
+     "id": "literature-framing-generator-vs-prosumer",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The claim is confirmed and the severity is understated. Expos\u00e9 \u00a72 opens with 'A renewable generator trading in the European day-ahead market', but dispatch.py:1-12 models a 'PV + battery prosumer' committing an import/export schedule, with peak/off-peak retail import prices and a feed-in price (configs/default.yaml:38-41). This is more than a literature-positioning issue. Objective 3 (settled DA and imbalance prices) does not fit the prosumer model, since a prosumer normally does not face DA or imbalance prices directly. Combined with the settlement-design finding, it decides whether the dispatch LP must be rewritten as a generator/BRP bidding model. That decision gates the weeks 3-6 data and baseline work already underway, so it is major rather than minor."
+    }
+   },
+   {
+    "id": "literature-yu2024-citation",
+    "title": "The Yu et al. (2024) entry has a truncated title and a missing author, and it is a weak representative of energy DFL",
+    "severity": "minor",
+    "evidence": "Expos\u00e9 \u00a78 (line 410) gives the title as 'End-to-end learning for stochastic preventive dispatch of renewables-rich power systems' with authors Yu, Li, Han, Ju. The published title adds '...in abnormal weather conditions', and Mohammad Shahidehpour is a fifth author (Renewable Energy 234, 121107, doi:10.1016/j.renene.2024.121107; verified via the paper record). This also contradicts the note that every entry 'was verified against Crossref' (line 397). Topically, the paper is about resilience and preventive dispatch, not market commitment.",
+    "recommendation": "Fix the entry: Yu, Q., Li, Z., Han, X., Ju, P., & Shahidehpour, M. (2024). End-to-end learning for stochastic preventive dispatch of renewables-rich power systems in abnormal weather conditions. Renewable Energy, 234, 121107. Make Carriere & Kariniotakis (2019) and Stratigakos et al. (2022) the lead 'DFL in energy trading' references, and keep Yu et al. as an example of reach into system operation. Remove the 'verified against Crossref' sentence from the thesis itself.",
+    "verification": {
+     "id": "literature-yu2024-citation",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Confirmed by web search. The published title ends '...in Abnormal Weather Conditions', and the author list includes Mohammad Shahidehpour as fifth author (Renewable Energy 234, 121107, doi 10.1016/j.renene.2024.121107). The expos\u00e9 entry (\u00a78) truncates the title and drops that author while claiming every entry 'was verified against Crossref'. The paper studies resilience and preventive dispatch on IEEE 6/118-bus systems, not market commitment, so it is a weak lead reference. Minor."
+    }
+   },
+   {
+    "id": "literature-reference-format",
+    "title": "The NeurIPS/ICML references give arXiv IDs instead of proceedings pages, and the Mandi volume number differs between sources",
+    "severity": "minor",
+    "evidence": "Expos\u00e9 \u00a78: Agrawal 2019, Amos & Kolter 2017, Donti 2017, Gibbs & Cand\u00e8s 2021 and Romano 2019 are cited with arXiv IDs and no pages. OptNet is PMLR 70, 136-145. For Mandi et al., DBLP and MLAnthology give JAIR vol. 80, but the arXiv journal-ref says vol. 81, so anyone checking may see a conflict.",
+    "recommendation": "In the thesis, cite proceedings with volume and pages (e.g. Amos & Kolter, PMLR 70, 136-145; Donti et al., NeurIPS 30, 5484-5494) and keep the arXiv ID only as a supplementary link. Keep JAIR vol. 80 (the DBLP/publisher record). Use a reference manager (Zotero with Better BibTeX) exporting to the report.tex toolchain from now on.",
+    "verification": {
+     "id": "literature-reference-format",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Confirmed. In \u00a78, Agrawal, Amos & Kolter, Donti, Gibbs & Cand\u00e8s and Romano are cited with arXiv IDs and no proceedings volume or pages (OptNet is PMLR 70:136-145). The expos\u00e9's choice of JAIR 80 for Mandi et al. is the correct one to keep. This is purely cosmetic: minor."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "data",
+  "strengths": [
+   "The OPSD ingest is clean and defensible for what it does: a gap-free hourly UTC clock is enforced (src/riskaware_pv/data/opsd.py:104-107), only micro-gaps of 3 hours or less are interpolated (opsd.py:139-141) and long gaps are left as NaN on purpose, and capacity incoherence is detected instead of being hidden (opsd.py:118-120, 215-222). That carries over directly to a new data source.",
+   "COLUMN_MAP takes a zone prefix as a template (opsd.py:29-39) and SITES uses capacity-weighted centroids (opsd.py:46-51), so adding an ENTSO-E loader that returns the same canonical columns (solar_mw, load_mw, price_eur_mwh, plus new imbalance_price_eur_mwh) is a contained change. features.py:145-150 already passes exogenous price through the gate-time guard.",
+   "Four zone panels with near-complete solar, load and wind already exist (data/interim/opsd_{de,CH,DK,GB_GBN}_panel.parquet, 2015-01-01 to 2020-09-30, under 0.2% NaN for solar). That is a ready fallback for the forecasting side.",
+   "The expos\u00e9 already names the main data risk, that imbalance prices may not be obtainable for every zone (\u00a75, risk paragraph), and gives a fallback (keep the synthetic tariff and report it). The structure is right; it just needs to be made concrete.",
+   "The case-study report already states that the tariff is synthetic and that the target is a national aggregate (report.tex:838, 903). The thesis motivation follows honestly from those limitations."
+  ],
+  "notes": "I did not modify any files. I read the parquet files with /Users/dev/Agentic Workflows /case-study-1/.venv/bin/python. Verified spans: all four OPSD panels (/Users/dev/Agentic Workflows /case-study-1/data/interim/opsd_{de,CH,DK,GB_GBN}_panel.parquet) run 2014-12-31 23:00 to 2020-09-30 23:00 UTC. DE price runs 2018-09-30 23:00 to 2020-09-30 and is 65% NaN. GB price covers 2015-2020. CH and DK have no price. No panel has an imbalance price. Processed design matrices start 2015-01 (DK), 2016-12 (DE), 2017-11 (CH, GB).\n\nConcrete data plan:\n1. Main zone DE-LU, period 2019-01-01 to 2025-09-30 (hourly DA throughout). Generation, load and DA solar forecast from ENTSO-E (16.1, 6.1.A, 14.1.D). DA price from ENTSO-E 12.1.D. Imbalance price is reBAP (quarter-hour) from netztransparenz, cross-checked against ENTSO-E 17.1.G.\n2. Contrast zones: NL (TenneT imbalance prices) and DK1 (Energinet, single price from 2021-11-01). GB through Elexon Insights is optional (single price since 2015-11-05, off ENTSO-E since 2021-06-15, GBP). Drop CH unless Swissgrid history is confirmed quickly.\n3. Splits by regime: train 2019-2022, test 2023-07 to 2025-09, with per-year reporting.\n4. Fallback: if imbalance data for a zone fails, keep the zone for forecasting and portability only, settle with the stylised asymmetric grid, and label it as stylised.\n5. Keep OPSD 2015-2020, pinned to the 2020-10-06 release, only to reproduce the case-study baselines.\n\nNot verified on the web: Swissgrid history depth and access, the exact Elexon Insights system-price endpoint path, and the Energi Data Service dataset name for DK imbalance prices. Check each in an afternoon before committing.\n\nSources: https://www.netztransparenz.de/BalancingCapacity/Imbalanceprice/Uniformimbalanceprice(reBAP) ; https://github.com/EnergieID/entsoe-py ; https://groups.google.com/g/openmod-initiative/c/1JGZYhuV76s ; https://www.fingrid.fi/en/news/news/2021/single-price-single-position-implemented-on-1-november-in-the-nordic-countries/ ; https://www.fingrid.fi/en/news/news/2021/data-publication-from-the-go-live-of-single-price/ ; https://elexon.co.uk/about/consultations/post-implementation-review-p305 ; https://www.next-kraftwerke.com/energy-blog/day-ahead-switch-15-min ; https://modoenergy.com/research/en/germany-october-2025-day-ahead-explained-wholesale-power-markets",
+  "findings": [
+   {
+    "id": "data-01",
+    "title": "Generation data stops at 2020-09-30, and real prices barely overlap with it: DE has 2 years, CH and DK have none, and no zone has imbalance prices",
+    "severity": "critical",
+    "evidence": "I read the parquet files with the venv. All four interim panels end at 2020-09-30 23:00 UTC. That is the final OPSD time_series release (2020-10-06), which report.tex:257 also cites; OPSD has stopped updating. The price columns that exist are DE price_eur_mwh, present only from 2018-09-30 23:00 and 65.2% NaN, and GB_GBN price, 2015-01-02 to 2020-09-30. CH and DK panels have no price column at all, and their design matrices have no price features. No panel has an imbalance price. The DE design matrix (data/processed/design_DE_solar_g12_quantile.parquet) has price_sameh_d1 at 47% NaN. The expos\u00e9 plans settled day-ahead and imbalance prices across several zones on OPSD generation (\u00a73 Objectives 3-4, \u00a75 Data). As written, that gives at most about 2 years of DE (2018-10 to 2020-09, with the 2020 COVID months inside the test year) and nothing usable for CH or DK.",
+    "recommendation": "Stop treating OPSD as the generation source for the thesis. Rebuild the panels from the ENTSO-E Transparency Platform (entsoe-py, free API token): actual generation per type (16.1.B/C), actual load (6.1.A), day-ahead wind and solar forecasts (14.1.D, also useful as a strong benchmark and feature) and day-ahead prices (12.1.D). Use the same canonical column names so the rest of the pipeline is unchanged. Use OPSD only to cross-check 2015-2020 numbers against the new loader.",
+    "verification": {
+     "id": "data-01",
+     "verdict": "adjusted",
+     "severity": "critical",
+     "reason": "Verified with the venv: all four interim panels end 2020-09-30 23:00. DE price_eur_mwh starts 2018-09-30 23:00 and is 65.2% NaN. CH and DK have no price column. GB_GBN has a price from 2015-01-02. The DE design matrix has price_sameh_d1 at 47% NaN, and no panel has an imbalance price. One overstatement: 'at most about 2 years of DE' holds only for the loader as written. OPSD also carries DE_AT_LU_price_day_ahead before the Oct 2018 split (see data-06), and reBAP history from netztransparenz goes back well before 2020, so 2015-2020 DE with real prices is possible. The core point stands. OPSD is frozen at 2020, there are no imbalance prices anywhere, and the expos\u00e9 \u00a75 plan (OPSD plus settled prices across several zones) cannot deliver Objective 3 as written. Moving to ENTSO-E is the right call. The expos\u00e9's \u00a75 fallback (keep the synthetic tariff) does not save the headline claim of 'euros on settled market prices', so the severity stays critical."
+    }
+   },
+   {
+    "id": "data-02",
+    "title": "Most real imbalance regimes use a single price, so the expos\u00e9's asymmetric 'short is punitive, long is cheap' framing does not hold for them",
+    "severity": "critical",
+    "evidence": "Expos\u00e9 \u00a72 says short positions are bought back at a punitive rate while long positions are absorbed for little, and the case study uses fixed asymmetric penalties of 300 and 90 EUR/MWh (configs/default.yaml:42-43; report.tex:323). Real settlement differs. DE reBAP is one symmetric quarter-hour price that can be positive or negative (netztransparenz). GB has used a single cash-out price since P305 went live on 5 Nov 2015 (Elexon). The Nordic TSOs, including Energinet DK1/DK2, moved to single price, single position on 1 Nov 2021 (Fingrid/eSett); before that they used dual production prices. Under a single price the cost of a deviation is (lambda_imb - lambda_DA) x deviation. Its sign and size are random, time-varying and correlated with the system-wide forecast error. The optimal quantile is therefore not a fixed penalty ratio, and it may sit close to the median. The 'penalty-by-storage grid' (Objective 4) then has no real-market counterpart for these zones, and the value of decision-focused learning could shrink a lot. That outcome would be a valid result, but the design has to expect it.",
+    "recommendation": "Decide now and write down how cost is defined: realised cost = DA revenue + (actual - committed) x lambda_imb per settlement period, using settled prices. Keep the synthetic asymmetric grid as a separate, clearly labelled stylised experiment. Report the empirical distribution of (lambda_imb - lambda_DA) and of its sign-conditional means per zone and year before training anything. That is the real 'penalty ratio', and it tells you early whether decision-focused learning has room to win.",
+    "verification": {
+     "id": "data-02",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The facts are correct. Expos\u00e9 \u00a71 does say short is 'bought back at a punitive rate' and long is 'absorbed for little'. Config lines 42-43 set 300/90. reBAP is a single symmetric price, GB has used single cash-out since P305 (Nov 2015), and the Nordics moved to single price on 1 Nov 2021. However, this does not threaten the thesis's validity or feasibility. Decision-focused learning stays well defined under a stochastic, error-correlated spread, and the stylised penalty grid remains a legitimate controlled experiment. It is a framing and cost-definition decision that must be made early, which makes it major rather than critical. The recommendation (define realised cost as DA revenue + deviation x lambda_imb, and inspect the spread distribution first) is sound."
+    }
+   },
+   {
+    "id": "data-03",
+    "title": "The dispatch LP models a prosumer on a retail tariff, not a generator committing in the day-ahead market, so real prices cannot simply be dropped in",
+    "severity": "major",
+    "evidence": "dispatch.py:70-72 builds an import price from peak and off-peak tariff constants, dispatch.py:193 and 267 use a flat export_price of 45. policies.py:58-60 rescales the national capacity factor to a 2 MW site, and policies.py:77-85 adds a synthetic 1.2 MW commercial load. Expos\u00e9 \u00a72 instead describes 'a renewable generator trading in the European day-ahead market'. Settled DA and imbalance prices fit a generator or BRP formulation (commit q_t at the DA price, settle the deviation at lambda_imb) and do not fit a behind-the-meter import/export tariff.",
+    "recommendation": "Reformulate stage 1 and stage 2 as a market-facing generator plus optional battery, with no synthetic load, in weeks 7-8. Pass the price vectors in as data, not as config constants. In stage 1, use a DA price forecast or the known DA clearing price. Note that the DA price is known after the auction but not at commitment for a price-taker, and choose explicitly between the two. Keep the old prosumer LP only to reproduce the case-study baseline.",
+    "verification": {
+     "id": "data-03",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified: dispatch.py:70-72 builds the import price from peak and off-peak constants, dispatch.py:193 and 267 use market.export_price (45), policies.py:58-60 rescales the capacity factor by pv_nameplate_mw, and policies.py:77-85 builds a synthetic load from load_peak_mw. That is a behind-the-meter prosumer, while expos\u00e9 \u00a71 describes a market-facing generator. Real DA and imbalance prices need a reformulated objective."
+    }
+   },
+   {
+    "id": "data-04",
+    "title": "A national aggregate rescaled to one site, settled against a national imbalance price, builds in an error-price correlation no single BRP faces",
+    "severity": "major",
+    "evidence": "The target is the German national solar aggregate scaled by its 99.9th percentile (opsd.py:215-222) and then multiplied by pv_nameplate_mw (policies.py:60). reBAP and the GB system price are driven by the system imbalance, and in a solar-heavy system the national solar forecast error is a large part of that imbalance. Settling a scaled copy of the national error at reBAP therefore gives the 'site' the full system correlation, which raises or lowers costs systematically. A real 2 MW plant's error is only partly correlated with the national error. A BRP holding the whole national fleet would also not be a price-taker.",
+    "recommendation": "Choose one framing and defend it in the methods chapter. (a) Portfolio-BRP framing: an aggregator holding a small share of the national fleet, as a price-taker. Then state explicitly that the error-price correlation is realistic for a portfolio and overstated for a single site. (b) Add de-correlated site series, for example TSO control-area solar (50Hertz, Amprion, TenneT, TransnetBW on ENTSO-E and netztransparenz) or an open single-site PV dataset, as a sensitivity check. In either case, report results both with real lambda_imb and with lambda_imb shuffled within its month and hour, to separate forecast value from correlation effects.",
+    "verification": {
+     "id": "data-04",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified: opsd.py:215-222 uses a 99.9th-percentile scale for non-DE zones, while DE uses reported capacity (the finding slightly misstates the DE path, but either way the result is a national-aggregate capacity factor). policies.py:60 then multiplies by the 2 MW nameplate. Settling a scaled national error against a system imbalance price builds in the system-level error-price correlation. This is a real modelling-validity issue once real reBAP is used, and the framing must be justified. The shuffled-price control is a good suggestion."
+    }
+   },
+   {
+    "id": "data-05",
+    "title": "Settlement-period structure: DE and EU imbalance is quarter-hourly, and the DE day-ahead market went to 15-minute products from delivery 1 Oct 2025",
+    "severity": "major",
+    "evidence": "configs/default.yaml:14 sets horizon 24 hourly steps, and opsd.py:105 enforces an hourly grid. The German ISP has been 15 minutes throughout, and reBAP is a quarter-hour price. SDAC moved to a 15-minute MTU for delivery from 1 Oct 2025, after slipping from June 2025. GB settles in 30-minute periods. A model with 24 hourly decisions settled against 96 quarter-hour imbalance prices understates cost, because hourly averaging hides intra-hour ramps that work against solar.",
+    "recommendation": "Pick an evaluation window that ends on 30 Sep 2025, so the DA market is hourly throughout. Settle each hourly commitment as a flat schedule over four quarter-hours, against quarter-hour actuals and reBAP. Do not average reBAP to hourly. ENTSO-E 16.1 actuals for DE are quarter-hourly. Treat 15-minute DA from Oct 2025 onward as out-of-scope future work or as one extra 'regime change' test.",
+    "verification": {
+     "id": "data-05",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "Verified: the config has horizon 24 and opsd.py:105 enforces an hourly grid. The facts hold: the DE ISP and reBAP are 15-minute, SDAC moved to a 15-minute MTU from delivery 1 Oct 2025, and GB uses 30-minute periods. One claim is asserted rather than shown: that hourly averaging 'understates cost'. Its direction depends on how intra-hour deviations correlate with reBAP, so it is plausible but unproven. Choosing the settlement granularity and an evaluation window ending 30 Sep 2025 is a necessary early decision. Major is fine."
+    }
+   },
+   {
+    "id": "data-06",
+    "title": "The DE price series is spliced across the Oct 2018 bidding-zone split, and the pre-split column is never resolved",
+    "severity": "major",
+    "evidence": "opsd.py:36 tries only '{c}_price_day_ahead' and '{c}_LU_price_day_ahead'. That yields DE_LU from 2018-10-01, and the DE_AT_LU price before the 1 Oct 2018 split is never read, which explains the 65% NaN. In the design matrix the price feature therefore switches from missing to present partway through the training window. That is an artificial covariate shift, which the drift experiments (Sub-question 4) could pick up as real drift.",
+    "recommendation": "For the thesis, start the main period at 2018-10-01 (DE-LU), or splice explicitly with DE-AT-LU and add a regime flag. Document the splice in the data chapter. Either way, rebuild features so that no exogenous column is structurally missing for part of the sample.",
+    "verification": {
+     "id": "data-06",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "Verified: COLUMN_MAP at opsd.py:36 tries only '{c}_price_day_ahead' and '{c}_LU_price_day_ahead'. For DE that resolves to DE_LU only, so pre-Oct-2018 DE_AT_LU is never read. That explains the 65% NaN in the panel and 47% in the design matrix, and creates a structural missing-to-present shift. It is a real bug in the case-study pipeline. However, once data-01 is adopted (ENTSO-E rebuild with a period starting at or after 2018-10, or 2019 per data-07), the problem largely goes away. As a standalone item it is minor: document it, and if a splice is used, add a regime flag."
+    }
+   },
+   {
+    "id": "data-07",
+    "title": "Choosing the study period means choosing a price regime, and the 2021-2023 energy crisis dominates any euro figure",
+    "severity": "major",
+    "evidence": "The OPSD-era DE DA price averages 35.8 EUR/MWh (min -90, max 200; computed from opsd_de_panel). From 2021 to 2023, DA and reBAP were several times higher and far more volatile. Negative-price hours with heavy solar rose sharply in 2023-2025. Expos\u00e9 \u00a76 promises 'euros on settled market prices' but does not say over which years. Results pooled across 2019-2025 would be dominated by the crisis months.",
+    "recommendation": "Main period for DE: train 2019-01 to 2022-12, calibrate in early 2023, test 2023-07 to 2025-09, all hourly-DA. Report results by year or regime: pre-crisis, crisis 2021-22, post-crisis 2023-25. Report regret normalised by the oracle and by the DA value of energy, in addition to raw EUR. Fix the split in configs/ before any training.",
+    "verification": {
+     "id": "data-07",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Recomputed: the OPSD-era DE DA price has mean 35.8, min -90.01 and max 200.04 EUR/MWh. Expos\u00e9 \u00a77 promises euros on settled prices but fixes no study period. The 2021-23 crisis regime would dominate pooled euro figures. Fixing the split and reporting by regime with normalised regret is necessary before training. The specific split proposed is a reasonable suggestion, not a requirement."
+    }
+   },
+   {
+    "id": "data-08",
+    "title": "The zone set needs replacing: GB left ENTSO-E in June 2021, CH has no OPSD price, DK is two bidding zones, and each has different imbalance rules",
+    "severity": "major",
+    "evidence": "SITES (opsd.py:46-51) is DE, CH, DK, GB_GBN. GB: ENTSO-E publication for BZN|GB stopped on 15 Jun 2021 and continues on Elexon BMRS/Insights (data.elexon.co.uk/bmrs/api/v1); its DA reference after Brexit is N2EX/EPEX GB, priced in GBP. DK: there is no national bidding zone, only DK1 and DK2 with separate DA and imbalance prices, and the imbalance scheme changed from dual to single price on 1 Nov 2021. CH: outside SDAC, with Swissgrid's own balancing-energy price rules; I did not verify how far back clean, bulk-downloadable history goes. The GB_GBN OPSD price contains spikes up to 999 (16 hours above 300, e.g. 2016-09-15). Their currency and plausibility were not checked.",
+    "recommendation": "Main zones should come from one source with one set of rules: DE-LU (reBAP from netztransparenz.de, with ENTSO-E 17.1.G A85 as a cross-check), NL (TenneT, dual-price in some ISPs, which gives a useful contrast to single price), and DK1 (Energinet, regime break on 2021-11-01). Use these for the portability question. GB stays optional through Elexon and needs FX conversion. Drop CH unless Swissgrid data is confirmed within a week. Map DK to DK1 (and DK2) rather than a national DK.",
+    "verification": {
+     "id": "data-08",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified: SITES at opsd.py:46-51 is DE, CH, DK, GB_GBN. GB_GBN price has max 999 and 16 hours above 300, so it was clearly never sanity-checked. DK is split into DK1 and DK2 with a single-price change in Nov 2021, CH is outside SDAC, and GB data moved to Elexon after Brexit and is priced in GBP. All are consistent with known facts. The portability question (Sub-question 5) needs a zone set with obtainable settled prices. The specific choice of NL and DK1 is a reasonable suggestion."
+    }
+   },
+   {
+    "id": "data-09",
+    "title": "The timeline has slipped: data acquisition was planned for weeks 3-4, and at week 6-7 the repo holds no new data and the raw OPSD file is gone",
+    "severity": "major",
+    "evidence": "Expos\u00e9 \u00a76 puts price acquisition and multi-zone extension in weeks 3-4 and re-run baselines in weeks 5-6. Today is 2026-11-16, about week 7. data/raw/ is empty (the OPSD CSV was deleted 2 Nov), and data/interim and data/processed contain only the Sep-10 OPSD artefacts. There is no ENTSO-E, reBAP or Elexon loader in src/riskaware_pv/data/. opsd.py:22-25 also downloads from '/latest/' rather than a pinned release, so a rebuild could silently change inputs.",
+    "recommendation": "Make the data layer the only work for the next 2 weeks. (1) Get an ENTSO-E API token and pin entsoe-py. (2) Write data/entsoe.py and data/imbalance.py (reBAP CSV, Energinet, TenneT), each caching raw responses with a hash manifest. (3) Pin the OPSD URL to the 2020-10-06 release for reproducing the case study. (4) Add tests: price timestamps in UTC with the correct period start/end convention, no DST duplicates, and quarter-hour completeness. Then re-run the baselines, which absorbs the planned weeks 5-6.",
+    "verification": {
+     "id": "data-09",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified: data/raw/ is empty, data/interim and data/processed hold only the OPSD artefacts, and there is no ENTSO-E, reBAP or Elexon loader. opsd.py:22-25 downloads from '/time_series/latest/', which is not pinned. Expos\u00e9 \u00a76 schedules price acquisition for weeks 3-4 and baselines for weeks 5-6. At about week 7 that work has not started, while the plan puts the cost-weighted quantile loss in weeks 7-9. The expos\u00e9 says dates are 'to be confirmed', which softens this slightly, but the slip is real. I could not verify the claimed 2 Nov deletion date, and it does not matter to the finding."
+    }
+   },
+   {
+    "id": "data-10",
+    "title": "Settled versus estimated imbalance prices: data latency and revisions",
+    "severity": "minor",
+    "evidence": "netztransparenz publishes quality-assured reBAP only by about the 20th working day of the following month. The real-time 'IP estimator' is a different series. ENTSO-E 17.1.G A85 for some zones has had gaps and revisions, and entsoe-py's raw client returns ZIP for this document type.",
+    "recommendation": "Use only final, quality-assured settlement prices for evaluation, and never use them as features, because they are not known at gate closure. If imbalance-price features are used at all, take lagged values with at least a 2-day lag. Extend the leakage guard to check this, and record the download date per month file.",
+    "verification": {
+     "id": "data-10",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "This is general and correct guidance. Settled imbalance prices are not known at gate closure, so they must not be used as features, and quality-assured values arrive with a lag. Minor is appropriate."
+    }
+   },
+   {
+    "id": "data-11",
+    "title": "There is no NWP or TSO forecast input, so the thesis may measure the cost of a weak forecaster rather than the value of decision-focused learning",
+    "severity": "minor",
+    "evidence": "The design matrices contain only clear-sky, calendar and lagged-generation features (columns listed for design_*_quantile.parquet). report.tex:903 names the missing weather model as the ceiling. ENTSO-E 14.1.D publishes the TSOs' own day-ahead solar forecasts for the same zones and period.",
+    "recommendation": "Fetch ENTSO-E 14.1.D DA solar forecasts while building the new loader and use them both as a feature and as a 'what the TSO knew' baseline. Do not add NWP archives unless time allows: Open-Meteo historical forecast API from 2022, or ERA5 as reanalysis, which is not a true forecast and would be leakage-adjacent.",
+    "verification": {
+     "id": "data-11",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Verified: the design-matrix columns are clear-sky, calendar, lagged generation and lagged load, price and wind only, with no NWP or TSO forecast. A weak base forecaster could inflate the measured decision-focused-learning gain. ENTSO-E 14.1.D is a cheap baseline and feature. Minor is reasonable, and arguably borderline major for interpreting the results."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "design",
+  "strengths": [
+   "The staged design is a real strength. Expos\u00e9 \u00a75-6 orders the methods cost-weighted loss -> SPO+ -> differentiable layer, so a reportable result exists even if the riskiest component fails, and \u00a77 already frames the negative outcome as useful. That is the right posture for a 24-week thesis.",
+   "The infrastructure that is expensive to get right already exists and is tested. That covers leakage-audited features, the HiGHS two-stage LP with a perfect-foresight oracle (src/riskaware_pv/decision/dispatch.py:128-292), regret computed per delivery day (results/e2_daily.csv) and the penalty-by-storage sweep (experiments/e2_dispatch.py:122). DFL can be bolted onto this instead of built from scratch.",
+   "The primary metric is decision-relevant: realised cost against an oracle. Calibration, sharpness and coverage are kept as secondary metrics, so the cost/validity trade-off (SQ3) becomes measurable rather than assumed.",
+   "Paired daily data supports good statistical power. In e2_daily.csv the daily point-minus-stochastic regret differences have SD of about 31 EUR and lag-1 autocorrelation of 0.03. On all available test days (~700), a paired design can detect differences of about 3 EUR/day (~2% of regret), which is a realistic DFL effect size.",
+   "The student has habits worth carrying forward from CS1: budget-matched comparisons (report.tex:350), carrying naive baselines through to the end, and an honest limitations chapter (report.tex:826-875). That chapter is effectively a ready-made list of what to fix."
+  ],
+  "notes": "The power figures are recomputed from results/e2_daily.csv using .venv/bin/python, read-only: paired SD 30.9 EUR/day, t=2.24 on n=200, lag-1 autocorrelation 0.03, and an 80%-power minimum detectable effect of about 6.1 EUR/day at n=200, 4.5 at n=365 and 3.2 at n=730. 'No thesis work in the repo since 30 Sep' is based on file modification times only; work may exist elsewhere. Proposed minimal core: DE only, synthetic-tariff regime A, linear + small MLP, losses {pinball, critical-fractile cost-weighted, one differentiable-LP DFL}, all test days, 5 seeds, DM/HAC + block bootstrap, penalty \u00d7 storage grid, and a calibration audit with CQR on top. Stretch: a second DFL method, the real-price DE case (regime B), drift on injected change points, and zero-shot transfer to one zone. The three most important things to settle this week, with the supervisor: the narrowed scope, the regret/oracle definition under real prices, and replacing SPO+.",
+  "findings": [
+   {
+    "id": "design-01",
+    "title": "Scope cannot be delivered in 24 weeks (now ~17.5 left), and none of the questions is stated as a testable hypothesis",
+    "severity": "critical",
+    "evidence": "Expos\u00e9 \u00a73 sets one main question with three moderators (penalty, flexibility, drift), five sub-questions and six objectives. Two of the objectives are 'several European bidding zones' (Obj 4) and 'real settled prices' (Obj 3). \u00a76 schedules three DFL formulations, a calibration audit, drift, transfer and multi-zone data in 24 weeks. None of SQ1-SQ5 states a direction, an effect size or a decision rule. 'Under which conditions does any advantage appear' cannot be falsified as written.",
+    "recommendation": "Rewrite \u00a73 as 3-4 pre-registered hypotheses with a primary endpoint before writing any more code. Examples. H1: on held-out days, a decision-trained model reduces mean daily regret against the best tuned two-stage baseline of the same model class (primary test, alpha=0.05). H2: with zero storage the advantage is ~0, because the critical-fractile pinball loss is already decision-optimal (a sanity/mechanism check). H3: the advantage increases with storage size and penalty asymmetry (a trend test across pre-specified grid cells). H4: decision-trained models under-cover nominal 90% intervals, and CQR on top restores coverage while retaining at least X% of the cost advantage. Minimal core = H1-H4 for one zone (DE), one model class pair, the cost-weighted loss plus one gradient-based DFL method. Stretch = second DFL method, real-price case, drift, transfer. Get the supervisor to sign off the narrowed scope in writing now, because Obj 3-4 and SQ4-5 are in the approved expos\u00e9.",
+    "verification": {
+     "id": "design-01",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "Scope overload is real. The expos\u00e9 (\u00a73) has 1 main question, 5 SQs and 6 objectives, and \u00a76 crams 3 DFL formulations, real-price multi-zone data, a calibration audit, drift and transfer into 24 weeks. The 'nothing is testable' part is overstated. The main question has a direction ('reduce realised commitment cost ... compared with ... proper scoring rule') and can be tested as a paired cost comparison. SQ1 is an estimation question, not a hypothesis. \u00a75/\u00a76 also already stage the work so that 'a thesis exists even if' the differentiable layer fails, which partly mitigates the feasibility risk. Narrowing the core and pre-specifying primary endpoints is sound advice, but this belongs at major, not critical. The time-pressure part is covered by design-05."
+    }
+   },
+   {
+    "id": "design-02",
+    "title": "Primary metric (regret vs oracle) is undefined once storage and real settled prices are combined",
+    "severity": "critical",
+    "evidence": "CS1 regret is defined against synthetic, known, asymmetric penalties: config default.yaml market (300/90 EUR/MWh, a TOU import tariff) and the oracle in dispatch.py:286-292. Expos\u00e9 Obj 3 / \u00a75 Data replaces these with settled day-ahead and imbalance prices, which raises four problems. (a) German imbalance settlement (reBAP) is single-price: the long/short asymmetry is not a parameter but arises from the correlation between the price and the system state, and the price is unknown at gate closure. (b) An oracle that knows the realised imbalance price and PV can arbitrage the imbalance market with the battery, so regret would mostly measure price foresight rather than PV forecast quality. (c) The target is national aggregate PV scaled to a 2 MW site (report.tex:832-834). Its forecast error is therefore highly correlated with the German system imbalance and the reBAP sign, an artefact no real single site has, and it will distort decision value in an unknown direction. (d) The 'penalty-by-storage grid' (\u00a75 Evaluation) cannot be swept with real prices, because penalty is no longer a free parameter. In addition, the expos\u00e9 \u00a72 describes a renewable generator trading, while the actual LP is a prosumer with load, TOU imports and feed-in exports (dispatch.py:1-20).",
+    "recommendation": "Define the metric formally in a one-page evaluation protocol. Regret_d = cost(policy_d) - cost(PV-oracle_d), where the oracle knows realised PV but faces the same price information set as the policy (day-ahead prices known, imbalance price as expected or forecast at the gate), and both are settled ex post on realised prices. Report absolute cost and regret, plus the percentage of the gap closed with a CI. Keep two evaluation regimes, stated explicitly. Regime A, mechanism: the synthetic asymmetric tariff, with the penalty \u00d7 storage grid. Regime B, external validity: one DE case using real day-ahead and reBAP prices (2018-2020) as a single robustness check, with the national-aggregate correlation caveat stated. Align the \u00a72 framing with the prosumer LP actually being solved, or change the LP.",
+    "verification": {
+     "id": "design-02",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The substance checks out. CS1 regret uses the synthetic tariff (configs/default.yaml market: 300/90 penalties, TOU 220/120, export 45) and a perfect-PV oracle (dispatch.py:286-292). PV enters the RHS b = load - pv (dispatch.py:104). The LP is a prosumer with load, TOU imports and feed-in exports (dispatch.py:1-20, report.tex:319-321), not the 'renewable generator trading' of expos\u00e9 \u00a72. German reBAP is single-price, so penalty asymmetry is not a free parameter, and the grid in \u00a75 cannot be swept on real prices. The national-aggregate target (report.tex:832-834) correlating with system imbalance is a legitimate confound. Point (b), oracle imbalance arbitrage, is plausible but depends on implementation choices that don't exist yet. It is not critical, because the expos\u00e9 (\u00a75, last paragraph) already has a fallback ('the synthetic tariff is retained ... and the limitation is reported'), so Regime A stays viable. It is a decision to make early, so major."
+    }
+   },
+   {
+    "id": "design-03",
+    "title": "CS1's effect sizes sit at the noise floor; the thesis needs paired tests, all test days and multiple seeds or its comparisons will be uninterpretable",
+    "severity": "critical",
+    "evidence": "I recomputed these from results/e2_daily.csv. The headline stochastic-vs-point gain is 4.89 EUR/day (SD of paired differences 30.9, n=200, t\u22482.24). The 200-day subsample (report.tex:514) gives a minimum detectable effect of about 6.1 EUR/day (3.7% of regret) at 80% power. The expos\u00e9's motivating 'inversions' (\u00a72) are 161.74 vs 162.13 and 144.32 vs 144.82 EUR/day (results/e2_by_model.csv), differences of 0.4-0.5 EUR, roughly 10\u00d7 below what is detectable. CS1 says explicitly that it ran no significance tests (report.tex:752), used three folds (report.tex:840) and one seed (report.tex:862). DFL training through a differentiable LP is non-convex and seed-sensitive, so the variation between seeds could exceed the effect.",
+    "recommendation": "(1) Settle every test day (about 700+ days over 2018-2020, at 0.16 s per LP), not a 200-day subsample. (2) Make the delivery day the unit of inference. Test the paired daily cost differences with a Diebold-Mariano test using HAC (Newey-West) variance, and give 95% CIs from a moving-block bootstrap (block of about 7 days). (3) Train every stochastic model on at least 5 seeds, average over seeds before the paired test, and report the spread between seeds separately. (4) Pre-register a small set of primary comparisons, apply a Holm correction, and use a Model Confidence Set when ranking many configurations. (5) Run a power calculation now from the e2_daily.csv SD and state the minimum detectable effect in the methods chapter. (6) Drop the 'pairs invert' claim from the motivation, or restate it as 'not statistically distinguishable'.",
+    "verification": {
+     "id": "design-03",
+     "verdict": "confirmed",
+     "severity": "critical",
+     "reason": "I recomputed from results/e2_daily.csv (200 days \u00d7 5 policies). Point minus stochastic is 4.89 EUR/day with paired SD 30.93, n=200, t=2.24. The MDE at 80% power with alpha=0.05 is about 2.8\u00b7SD/sqrt(n) = 6.1 EUR/day. The inversions behind the expos\u00e9's motivation (\u00a72) in e2_by_model.csv are gbm_quantile_k raw 161.74 vs cqr 162.13, and ridge cqr 144.32 vs raw 144.82: 0.4-0.5 EUR differences, far below that MDE. report.tex:752 says no significance tests were run, report.tex:840 says three folds, report.tex:862 says one seed. The motivating 'pairs invert' claim is therefore not statistically supported, and a DFL-vs-baseline difference of similar size would be uninterpretable without paired, multi-seed inference. Critical is justified because the thesis's core contrast lives at this effect scale."
+    }
+   },
+   {
+    "id": "design-04",
+    "title": "The planned comparison is confounded by model class, decision rule, tuning effort, and a commitment quantile chosen on test data",
+    "severity": "critical",
+    "evidence": "(a) CS1's best models are ridge and GBM (e2_by_model.csv). Gradient DFL (cvxpylayers/SPO+) needs a differentiable model such as a linear model or MLP, so a 'DFL vs best baseline' comparison mixes loss with model class. (b) The baselines use stochastic SAA over 40 common-factor scenarios (report.tex:317-327), whereas a DFL point forecast is normally plugged into a deterministic LP. That confounds the loss with the decision rule and with the scenario generator. (c) Expos\u00e9 \u00a75 Baselines keeps the baselines 'retained unchanged', and CS1 did no hyperparameter search (report.tex:752), while DFL gets 4-week tuning phases (\u00a76 wks 10-17). That tuning asymmetry favours DFL. (d) The CS1 q=0.55 optimum (report.tex:545) was selected on the same days it is scored on (experiments/e2_dispatch.py:92-121 uses the test-day frames). (e) With no storage the problem is a newsvendor, so pinball loss at the critical fractile is already decision-optimal. The 'cost-weighted quantile loss' is therefore the correct two-stage optimum, not a DFL variant, and any DFL gain can only come from intertemporal coupling through the battery.",
+    "recommendation": "Use a factorial comparison within one model class: loss {pinball/CRPS, cost-weighted critical-fractile pinball, DFL} \u00d7 model {linear, small MLP} \u00d7 decision rule {deterministic plug-in, tuned-quantile plug-in, SAA}, all with identical features and folds. Give baselines and DFL the same tuning budget on the same validation split. Choose the commitment quantile and every hyperparameter on validation days, never on test days. Report CS1's ridge+SAA and tuned-quantile ridge as external reference rows, but test hypotheses only within a model class.",
+    "verification": {
+     "id": "design-04",
+     "verdict": "confirmed",
+     "severity": "critical",
+     "reason": "(a) The best CS1 models are ridge and GBM (e2_by_model.csv), and gradient DFL needs a differentiable model class, so loss is confounded with model class. (b) The baselines use SAA over scenarios (report.tex:317ff, market n_scenarios 40). (c) Expos\u00e9 \u00a75 says the baselines are 'retained unchanged', CS1 did no hyperparameter search (report.tex:752), and DFL gets multi-week tuning phases (\u00a76). (d) quantile_sweep (experiments/e2_dispatch.py:92-121) calls _day_frames on the scored prediction frame, so q=0.55 (report.tex:545) is chosen on the evaluation days. (e) With zero storage the hours decouple into newsvendor problems, whose cost is a scaled pinball loss at the hour-specific critical fractile, so the cost-weighted loss is the decision-optimal loss there, even under misspecification. Each of these confounds directly undermines the main question's comparison."
+    }
+   },
+   {
+    "id": "design-05",
+    "title": "Timeline: at week ~7, the work planned for weeks 1-6 is not visible in the repo, and the original plan leaves too little writing time",
+    "severity": "critical",
+    "evidence": "Thesis starts Oct 2026 and runs 24 weeks, ending about mid-to-late March 2027; today is 16 Nov (week 7). Expos\u00e9 \u00a76 puts the literature review in weeks 1-2, real-price multi-zone data in weeks 3-4, re-established baselines in weeks 5-6, and the cost-weighted loss starting in week 7. Nothing in the repo has changed since 30 Sep except the supervisor emails (checked via find -newermt 2026-09-30): no new data loader, no price data, no baseline table, no DFL code. The plan also puts the riskiest component (the differentiable layer) in weeks 14-17 and leaves only weeks 22-24 for writing, final experiments and defence.",
+    "recommendation": "Revised plan for weeks 7-24. W7: scope freeze and a one-page evaluation protocol/hypotheses (design-01/02/03), signed off by the supervisor; check that reBAP and DE-LU day-ahead prices can be obtained for 2018-2020. W8-9: evaluation harness with monthly rolling origins plus a validation block, all test days, a stats module (DM/HAC, block bootstrap, Holm) with tests; re-run the baselines with q tuned on validation and multiple seeds. Deliverable: baseline table with CIs. Start the methods chapter. W10-11: cost-weighted / critical-fractile loss in the linear and MLP classes. First H1/H2 result. W12-15: one gradient-based DFL method (a regularised differentiable LP via cvxpylayers, or Donti-style task loss), warm-started from the pinball solution, 5 seeds. W16-17: penalty \u00d7 storage grid (H3) plus calibration audit and CQR on top (H4). W18: real-price DE robustness case. W19: buffer, or one stretch item (a second DFL method, or drift). W20-23: writing (results, discussion, intro/related work; the literature review gets folded in). W24: submission and defence. Kill criterion: if the differentiable layer is not producing stable gradients by the end of W14, stop and write up the cost-weighted result plus the negative finding.",
+    "verification": {
+     "id": "design-05",
+     "verdict": "confirmed",
+     "severity": "critical",
+     "reason": "find -newermt 2026-09-30 in the repo returns only .DS_Store files and the supervisor email drafts (Sep 30 / Oct 1). There is no price data, no new loader, no baseline re-run and no DFL code. The parent directory has no other thesis folder newer than September; case-study-2 is dated Sep 3. The user's own wording ('so that we can start working on that from now on') corroborates that work has not started at week ~7 of 24. \u00a76 does put the riskiest piece in weeks 14-17 and leaves weeks 22-24 for writing, final experiments and defence. Caveat: work could exist outside this machine or folder, and \u00a76 says the dates are 'to be confirmed', so the student should verify the official start and end dates. The revised plan is reasonable."
+    }
+   },
+   {
+    "id": "design-06",
+    "title": "SPO+ does not directly apply: the uncertain quantity (PV) is in the constraints, not the linear cost vector",
+    "severity": "major",
+    "evidence": "Expos\u00e9 \u00a73 Obj 2 and \u00a74 invoke SPO+ and its 'consistency guarantees for linear objectives' (Elmachtoub & Grigas 2022). SPO+ assumes min c^T x over a known feasible set with c predicted. In dispatch.py:96-125 PV enters the right-hand side of the energy-balance equality (b = load - pv), and the cost coefficients (prices and penalties) are known. The guarantees therefore do not transfer, and a naive SPO+ implementation would not be well-posed. This threatens SQ2 ('which formulation performs best') as written.",
+    "recommendation": "Replace SPO+ in the core plan with a method that handles uncertainty in the constraints or in the recourse. Options include task-based end-to-end learning through the two-stage problem (Donti et al. 2017, already cited), a quadratically regularised LP layer (cvxpylayers), or perturbed-optimiser gradients. Keep SPO+ only if you derive a valid reformulation, for example a recourse-cost representation, and state the assumptions explicitly. Reword SQ2 as 'cheap cost-weighted loss vs one full differentiable-optimisation method'.",
+    "verification": {
+     "id": "design-06",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "SPO+ (Elmachtoub & Grigas 2022) assumes min c^T x over a known feasible set, with c being the predicted quantity. In dispatch.py:96-110 the uncertain PV enters the equality RHS (b = load[t] - pv[s,t]), and the prices and penalties in c are known config constants. SPO+ and its consistency guarantees do not apply as stated in expos\u00e9 \u00a73 Obj 2 and \u00a74/\u00a75. A side note that helps the student: because PV sits in the RHS, the LP optimal value is piecewise linear (not piecewise constant) in the prediction. The \u00a75 risk statement ('true gradient is zero almost everywhere') describes cost-vector uncertainty, which is the wrong case here, and makes a differentiable-layer or Donti-style approach more tractable than the expos\u00e9 fears. Major is appropriate."
+    }
+   },
+   {
+    "id": "design-07",
+    "title": "Drift (SQ4) and transfer (SQ5) plus multi-zone evaluation (Obj 4) are scope creep resting on weak CS1 evidence",
+    "severity": "major",
+    "evidence": "CS1's drift policy fired once in two years (report.tex:866-868) and its thresholds were adjusted after seeing the data (report.tex:870-872), so there is no base to measure a 'faster degradation' of DFL models against. Transfer rests on three northern-European targets and one source (report.tex:848-852), and capacity normalisation fails outside DE (report.tex:268-272). Real imbalance prices for CH, DK and GB come from different market designs (single vs dual pricing, different settlement periods), which would multiply the data work scheduled for weeks 3-4.",
+    "recommendation": "Move SQ4, SQ5 and multi-zone to stretch goals or the outlook chapter. If time remains, run one experiment only: zero-shot application of the DE-trained DFL model to one zone under the synthetic tariff (regime A), or a drift study on semi-synthetic injected change points with known locations. Do not make either part of the main question.",
+    "verification": {
+     "id": "design-07",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "report.tex:866-868: the drift policy fired once in two years. report.tex:870-872: detector standardisation was introduced after a zero-trigger first run. report.tex:848-852: transfer rests on three northern targets and one source. report.tex:268-272: capacity normalisation fails outside DE (CH 2.94x, DK 1.81x, GB 1.37x). Imbalance settlement designs did differ across these zones in 2018-2020. For example, Nordic markets used two-price settlement for production imbalances until the 2021 single-price harmonisation, while GB was single-price. That adds substantial data work. Moving SQ4/SQ5 and multi-zone to stretch goals is justified."
+    }
+   },
+   {
+    "id": "design-08",
+    "title": "The fold design must change: three 365-day folds leave no validation block for DFL tuning or early stopping",
+    "severity": "major",
+    "evidence": "make_folds (src/riskaware_pv/evaluation/backtest.py:42-72) builds expanding folds with train / 90-day calibration / 365-day test blocks. On OPSD 2015-2020 data (src/riskaware_pv/data/opsd.py:4) that yields three folds. config backtest.step_days: 30 exists but make_folds never reads it. DFL needs a validation block for hyperparameters, early stopping and quantile selection, and CQR needs its own calibration block. Reusing the calibration slice for both would leak.",
+    "recommendation": "Move to monthly (or quarterly) rolling origins over the 2018-2020 test window, with four chronological blocks per origin: train / validation (DFL tuning, q selection) / conformal calibration / test. Extend the adversarial leakage test to the new training path, as the expos\u00e9 promises (\u00a75 Reproducibility). Note the data-vintage issues as known breaks: OPSD ends in 2020, the DE-AT-LU split in Oct 2018, and COVID-2020 load and prices.",
+    "verification": {
+     "id": "design-08",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "make_folds (backtest.py:42-72) builds expanding train / 90-day calib / 365-day test blocks and never reads step_days. One clarification: step_days is documented in config.py:62 as the refit cadence for the 'periodic' drift policy, so leaving it unused here is intended, not a bug. The report says three folds (report.tex:840). There is no validation block distinct from the conformal calibration slice, so DFL early stopping, hyperparameter selection and commitment-q selection would either leak into the calibration slice or into test (see design-04d). Major is right."
+    }
+   },
+   {
+    "id": "design-09",
+    "title": "Calibration sub-question (SQ3) is not operationalised for point-output DFL models",
+    "severity": "major",
+    "evidence": "Expos\u00e9 \u00a73 SQ3 and Obj 5 audit 'calibration, sharpness and interval validity' of decision-trained models. A model trained through a deterministic plug-in LP outputs one trajectory per day, so CRPS, PICP and PINAW are undefined for it. Only quantile-output variants, such as the cost-weighted pinball, have a calibration to audit.",
+    "recommendation": "Decide now which DFL models output distributions. Options are DFL-trained quantile heads feeding SAA, or a point DFL model wrapped with conformal residual quantiles. Define SQ3 on those models, with PICP, CRPS and per-month coverage as the metrics, and test H4 ('CQR on top keeps at least X% of the cost advantage') with the same paired-day machinery.",
+    "verification": {
+     "id": "design-09",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Expos\u00e9 \u00a73 SQ3 and Obj 5 audit 'calibration, sharpness and interval validity' of every decision-trained model, but \u00a75 never says whether the DFL models output distributions. A point-output model trained through a deterministic plug-in LP has no intervals, so PICP/CRPS are undefined unless it is wrapped (e.g. conformal residual quantiles) or trained as a quantile/scenario head. This has to be decided before implementation. Major is fair, but it is a design choice the student can settle quickly."
+    }
+   },
+   {
+    "id": "design-10",
+    "title": "Penalty \u00d7 storage grid: 16 cells \u00d7 90 days gives noisy, multiplicity-prone conditional claims",
+    "severity": "major",
+    "evidence": "CS1 grid (report.tex:582-605, results/e2_sensitivity.csv) gives 16 cells at 90 days each. The non-monotone middle of the grid was explicitly not interpretable (report.tex:844-846). The main question's 'under which conditions' depends on this grid.",
+    "recommendation": "Run every cell on all test days with a per-cell paired CI. Pre-specify the inference: a monotone-trend test across storage sizes at fixed penalty, and across penalty ratios, rather than 16 separate significance claims. Present everything else as descriptive.",
+    "verification": {
+     "id": "design-10",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "report.tex:582-585 confirms the 4\u00d74 grid at 90 days per cell, and report.tex:844-846 says the non-monotone middle is not interpretable. Expos\u00e9 \u00a75/\u00a77 make 'under which conditions' and the 'map of when it is worth doing' depend on this grid, so running all test days per cell with a pre-specified trend test is needed. Major is appropriate, at the lower end."
+    }
+   },
+   {
+    "id": "design-11",
+    "title": "SQ1 'share of the gap to perfect foresight closed' needs an estimator and a CI",
+    "severity": "minor",
+    "evidence": "Expos\u00e9 \u00a73 SQ1 and \u00a77 bullet 1 define the quantity only as (R_base - R_DFL)/R_base, a ratio of noisy means. The oracle with storage is an unattainable bound, so the share closed will be small and unstable.",
+    "recommendation": "Define it as a ratio of mean daily regrets, give block-bootstrap percentile CIs, and always report the absolute EUR/day difference next to it. Use the best tuned two-stage baseline within the same model class as the denominator.",
+    "verification": {
+     "id": "design-11",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "The expos\u00e9 does not actually give the formula (R_base - R_DFL)/R_base. \u00a73 SQ1 and \u00a77 bullet 1 describe the quantity only in words ('how much of the remaining gap to perfect foresight'), with no estimator, denominator choice or uncertainty measure. So the gap is even larger than the finding says, but it remains minor and is cheap to fix with the recommended ratio-of-means plus block-bootstrap CI plus absolute EUR difference."
+    }
+   },
+   {
+    "id": "design-12",
+    "title": "The state of the art may understate prior DFL / value-oriented forecasting work for renewable trading",
+    "severity": "minor",
+    "evidence": "Expos\u00e9 \u00a74 cites only Yu et al. (2024) for DFL in energy and claims the approach is 'not yet standard for day-ahead market commitment'. Value-oriented and decision-focused forecasting for wind/PV trading is an active line of work, and the novelty claim depends on how this thesis differs from it.",
+    "recommendation": "In the (overdue) literature review, search specifically for 'value-oriented forecasting', 'decision-focused learning wind/PV trading' and 'end-to-end bidding renewable'. Position the contribution as the audited pipeline, the controlled mechanism grid, the calibration trade-off and the statistical rigour, not as the first use of DFL in this setting.",
+    "verification": {
+     "id": "design-12",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The concern holds and is understated. Expos\u00e9 \u00a74 claims DFL 'is not yet standard for day-ahead market commitment' and cites only Yu et al. (2024) in energy. There is directly overlapping prior work on renewable trading and dispatch: Mu\u00f1oz, Morales & Pineda (2020, IEEE TPWRS, feature-driven improvement of renewable forecasting and trading); Stratigakos et al. (2022, IEEE TPWRS, prescriptive trees for integrated forecasting and optimisation in renewable trading); and Zhang, Pinson et al. on value-oriented renewable forecasting (2023-2024). The thesis's novelty claim and the \u00a74 'gap' paragraph need rewriting, and an examiner would likely flag this. It also bears on the overdue literature review (weeks 1-2), so it should be raised to major."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "codebase_readiness",
+  "strengths": [
+   "Test suite is green and fast: `.venv/bin/python -m pytest -q` gives 22 passed in 9.5 s (Python 3.11.15, torch 2.14.0, scipy 1.17.1). You can run it on every commit while developing the thesis code.",
+   "The feature layer is leakage-safe by construction. Every autoregressive feature goes through `_gated_shift`, which asserts at runtime that no lag post-dates the origin (src/riskaware_pv/data/features.py:53-58). On top of that, tests/test_no_leakage.py:35-67 poisons the series after the gate and checks the design matrix does not change, and it does this for gates 6, 12 and 18. This is the audited base the expos\u00e9 (Section 5) promises.",
+   "There is one model interface (`Forecaster`: fit/predict/predict_quantiles, models/base.py:32-104) and a factory registry (pipeline.py:78-113). Every fold gets a fresh model, so a decision-focused model can be added as one more registry entry and is scored through the same backtest, conformal wrapper (`ConformalizedQuantile`) and dispatch policies as the baselines.",
+   "The LSTM is already in PyTorch, with a monotone quantile head that cannot produce crossing quantiles (models/neural.py:67-92), a hand-written training loop (neural.py:217-233) and gradient clipping. Swapping its loss for a decision loss changes only a few lines; no framework migration is needed.",
+   "The dispatch LP is a clean, fully linear two-stage program: energy balance, SoC dynamics, an optional CVaR term via Rockafellar-Uryasev, and a terminal SoC constraint (decision/dispatch.py:93-217). The `_Vars` block allocator makes the variable layout explicit, so it can be ported one-to-one to cvxpy. It is also fast. I measured 1.6 ms per solve with one scenario and 64 ms with 40 scenarios, so SPO+-style training with one LP solve per day and epoch is affordable (about 730 days x 25 epochs x 2 ms, roughly 40 s per fold).",
+   "Settlement is kept separate from commitment: `evaluate_commitment` fixes the stage-1 schedule and settles it against realised PV (dispatch.py:220-283). That is exactly the realised-cost / regret oracle a decision-focused training loss and its evaluation both need. Property tests check that the oracle is a lower bound, that a perfect forecast attains oracle cost, and the energy balance (tests/test_dispatch.py)."
+  ],
+  "notes": "I ran the test suite with `.venv/bin/python -m pytest -q`: 22 passed in 9.46 s (Python 3.11.15). I modified no repo files; the only checks I ran beyond the tests were timing the dispatch LP and stress-testing it with real-price cases.\n\nThe codebase is a good base for the thesis, but two design questions should be settled before any implementation. First, SPO+ does not fit directly because PV enters the LP through the constraints rather than the cost vector (finding 01). Second, real prices break the LP (finding 02) and also create a new decision-time leakage risk (finding 03). The expos\u00e9 schedules the real-price data work for weeks 3-4, and we are already in week 6-7, so data and LP hardening are now on the critical path.\n\nRefactoring list, in priority order:\n1. Run `git init` and commit the current state as tag `cs1-final`. Add a lockfile and a `dfl` optional-dependency extra (cvxpy, cvxpylayers, diffcp, clarabel), and check that it installs next to numpy 2.4 and torch 2.14 (finding 11).\n2. Write down the decision model mathematically: prosumer or generator, single-price or dual-price imbalance, how SPO+ is applied given that PV sits in the constraints. Revise sub-question 2 if needed (findings 01 and 02).\n3. Harden the LP for real prices: time-varying price vectors, grid limits, a test with negative and single-price inputs, and fail loudly instead of returning NaN (finding 02).\n4. Separate decision-time prices from settlement prices, and add a decision-layer leakage test, a fold-isolation test and a fix for the tautological LSTM assertion (findings 03 and 10).\n5. Switch to a local-time gate and delivery day, with 23/25-hour days on DST switches (finding 08).\n6. Add a price and imbalance data source (ENTSO-E / reBAP), per-zone config, train-only normalisation and a pinned OPSD version (finding 07).\n7. Extend the Forecaster contract with `decision_ctx`, remove the TypeError fallback in the backtest, and pass a gated history instead of the full frame (finding 04).\n8. Use per-day common-random-number scenarios, and add a regression test that freezes the CS1 baseline results (finding 09).\n9. Add sample-weight and custom-objective support to the GBM models for the cost-weighted variant (finding 13).\n10. Factor out a reusable torch trainer with a day-batcher and differentiable post-processing (finding 05).\n11. Build one cvxpy formulation, add an equivalence test against the HiGHS solver, and add a regularised cvxpylayers layer; benchmark it at S=1 first (finding 06).\n12. Housekeeping: move presentation/colab_bundle, the zip and the videos out of the tree, remove .DS_Store and __pycache__, and fix the panel cache trimming (findings 12 and 14).\n\nMeasured numbers:\n- LP solve time: 1.6 ms with one scenario, 64 ms with 40 scenarios.\n- Unbounded cases confirmed: export price above import price, and a negative import price.\n\nKey files:\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/decision/dispatch.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/decision/policies.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/models/base.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/models/neural.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/evaluation/backtest.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/data/features.py\n- /Users/dev/Agentic Workflows /case-study-1/src/riskaware_pv/data/opsd.py\n- /Users/dev/Agentic Workflows /case-study-1/tests/test_no_leakage.py\n- /Users/dev/Agentic Workflows /case-study-1/experiments/e2_dispatch.py",
+  "findings": [
+   {
+    "id": "codebase_readiness-01",
+    "title": "PV uncertainty enters the dispatch LP in the constraint right-hand side, not the cost vector, so SPO+ cannot be applied as the expos\u00e9 describes",
+    "severity": "critical",
+    "evidence": "In dispatch.py:100-110 forecast PV appears only in b_eq (`b = load[t] - pv[s, t]`). The cost vector c (dispatch.py:190-200) holds only prices and penalties. SPO+ (Elmachtoub & Grigas 2022, expos\u00e9 Sections 3 and 5) is defined for linear objectives whose *cost coefficients* are predicted. With the predicted quantity in the RHS, the SPO+ surrogate and its consistency guarantee do not carry over. The Week 10-13 phase in the expos\u00e9 (Section 6) assumes they do.",
+    "recommendation": "Decide now, before Week 7-9 work starts, how SPO+ maps onto this problem. Options: (a) reformulate so PV appears in the objective, e.g. eliminate the recourse and write the imbalance cost as a piecewise-linear function of the forecast (newsvendor form), which is valid without a battery or with a fixed battery policy; (b) replace SPO+ with a method designed for RHS/constraint uncertainty (e.g. the differentiable layer, or a direct regret-gradient approach such as perturbed optimizers); (c) keep SPO+ only for a price-forecasting variant. Write the chosen mathematical formulation into the thesis methodology before implementing anything.",
+    "verification": {
+     "id": "codebase_readiness-01",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "The technical claim holds. In dispatch.py:100-104 forecast PV enters only b_eq (`b = load[t] - pv[s, t]`), and c (dispatch.py:190-198) holds only prices and penalties. SPO+ as defined by Elmachtoub & Grigas assumes predicted linear cost coefficients, and the expos\u00e9 itself restates this ('consistency guarantees for linear objectives'), so the Week 10-13 SPO+ arm has no valid formulation yet. Downgraded from critical to major: this is one of three staged arms, the expos\u00e9 deliberately keeps cheaper fallbacks (the cost-weighted loss in Weeks 7-9 and the differentiable layer), and the thesis stays feasible. It is still a methodology decision to settle before Week 10, not a validity threat to the whole thesis."
+    }
+   },
+   {
+    "id": "codebase_readiness-02",
+    "title": "Real day-ahead and imbalance prices make the commitment LP unbounded and silently drop days from the results",
+    "severity": "critical",
+    "evidence": "I verified this by running the LP. Setting export_price=250 > import gives 'The problem is unbounded' (HiGHS status 10). A negative off-peak import price (-50) also gives unbounded. The causes: gp/gm have no upper bound (dispatch.py:80-82), import and export are not mutually exclusive, there is no grid-connection limit, and charge/discharge can run simultaneously. Real DE day-ahead prices go negative and use one price for buying and selling. The German imbalance price (reBAP) is single-price and can be negative, so the fixed up/down penalty structure (config.py:91-92) does not describe the real market. When a solve fails, run_policy returns total_cost=NaN (policies.py:133-134). summarise_policies then takes the mean, which skips NaNs, while `n_days` (e2_dispatch.py:85) still counts those rows, so failed days disappear from the cost averages without notice.",
+    "recommendation": "Before switching to real prices: add grid import/export limits (P_grid_max) as bounds on gp, gm, up and dn. Accept time-varying price vectors (`price_da[t]`, `price_imb_up[t]`, `price_imb_dn[t]`) instead of MarketConfig scalars. Add a test with negative and single-price inputs that asserts status=='optimal'. Make run_policy raise on unbounded or infeasible instead of returning NaN, or at least count and report dropped days. Also decide explicitly how a single-price imbalance market (reBAP) changes the asymmetric-penalty story in the thesis. Under symmetric settlement the newsvendor argument, and much of the expected decision-focused gain, may vanish.",
+    "verification": {
+     "id": "codebase_readiness-02",
+     "verdict": "confirmed",
+     "severity": "critical",
+     "reason": "Reproduced with the repo code (PYTHONPATH=src .venv python). With default config the solve is optimal. export_price=250 gives 'The problem is unbounded (HiGHS Status 10)', and so does import_price_offpeak=-50. gp/gm are bounded only below (dispatch.py:80-82). This is not hypothetical: the cached DE panel (data/interim/opsd_de_panel.parquet) already holds price_eur_mwh from 2018-09-30 to 2020-09-30 with 484 negative hours. A failed solve returns total_cost=NaN (policies.py:133-134), summarise_policies uses mean(), which skips NaN, while n_days uses g.size() (e2_dispatch.py:85), so failed days vanish silently. CS1 itself is unaffected: all 1000 rows in e2_daily.csv are 'optimal'. The code fix is easy. Critical is kept because the single-price reBAP point undercuts the expos\u00e9's core premise ('asymmetric prices... a punitive rate', Section 2), and the constant-penalty structure (config.py:90-92) does not survive contact with real settlement."
+    }
+   },
+   {
+    "id": "codebase_readiness-03",
+    "title": "With real prices the commitment would use the realised day-ahead price at gate closure, which is look-ahead the leakage guard does not check",
+    "severity": "critical",
+    "evidence": "Today the stage-1 LP reads a synthetic tariff that is known in advance (`import_price_vector`, dispatch.py:70-73). The expos\u00e9 (Section 3, objective 3) replaces it with settled day-ahead prices. Those clear after gate closure, so feeding realised D+1 prices into `solve_commitment` at decision time is look-ahead. tests/test_no_leakage.py only checks `build_design_matrix` and the LSTM sequences. Nothing tests the decision inputs (prices, load) or the decision-focused training path, which the expos\u00e9 (Section 5) promises to cover.",
+    "recommendation": "Separate decision-time price information (a price forecast, or prices known at the gate) from settlement prices (realised, used only in evaluate_commitment and in the training loss). Add a decision-layer leakage test: poison post-gate prices and imbalance prices and assert the committed schedules are unchanged. Training losses may use realised prices because they are labels, but inference must not.",
+    "verification": {
+     "id": "codebase_readiness-03",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "Correct as a design hazard. The stage-1 LP reads `import_price_vector` (dispatch.py:70-73, 188), and the leakage tests cover only build_design_matrix and the LSTM encoder (tests/test_no_leakage.py:35-143). No test touches decision inputs. However, this is a future pitfall in code not yet written, not an existing leak. Many price-taker studies also treat day-ahead prices as known or replace them with a forecast as an explicit, documented assumption. Major (decide and document early, add the poisoning test), not critical."
+    }
+   },
+   {
+    "id": "codebase_readiness-04",
+    "title": "The model interface has no way to pass decision context, and the backtest swallows TypeError",
+    "severity": "major",
+    "evidence": "`Forecaster.fit(X, y)` (base.py:93-94) receives no prices, load, battery or market parameters, and no day grouping. A decision-focused model needs all of these to compute its loss. The backtest calls `model.fit(X_tr, y_tr, history=history)` and falls back to `fit(X_tr, y_tr)` on *any* TypeError (backtest.py:84-91). A genuine TypeError raised inside a new decision-focused fit would be silently retried without its context and still produce numbers. The backtest also passes `history=X`, the full frame including the test fold (backtest.py:126; drift/policies.py:43). The LSTM only reads windows ending at the origin, but a new model that touches `history` freely would leak.",
+    "recommendation": "Extend the contract explicitly: `fit(X, y, *, history=None, decision_ctx=None)` on the base class, with a `DecisionContext` dataclass holding per-day price, load, battery and market data. Delete the try/except TypeError. Pass a gated history accessor, or a frame truncated at the fold's train end, instead of the full X.",
+    "verification": {
+     "id": "codebase_readiness-04",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. The abstract `fit(self, X, y)` takes no decision context (base.py:~93). `_fit` catches any TypeError and silently retries without history (backtest.py:84-91), and the same pattern appears in drift/policies.py:~40-46. `_fit(factory, fit_on, history=X)` passes the full frame including test folds (backtest.py:126). Severity is appropriate."
+    }
+   },
+   {
+    "id": "codebase_readiness-05",
+    "title": "LSTM training samples random rows rather than whole days, and the post-processing is outside the computation graph",
+    "severity": "major",
+    "evidence": "neural.py:221-228 builds minibatches from `torch.randperm(n)` over hourly rows, and in k-space night rows are dropped (base.py:81-90). The dispatch LP couples the 24 hours of a day through SoC (dispatch.py:112-123), so any decision loss needs complete 24-hour days in each batch. The conversion from k to MW (base.py:64-70), the clipping and the night clamp (base.py:72-79), and the national-to-site scaling (`_as_site_mw`, policies.py:58-60) are all done in numpy after prediction, so no gradient can flow through them.",
+    "recommendation": "Factor the training loop into `TorchForecaster._train(loss_fn, batcher)`. Add a day-batcher that groups rows by `origin` into (B, 24, ...) tensors. Re-implement the target-space inverse, the night mask and the nameplate scaling as differentiable torch ops so the decision layer receives forecasts in MW. Keep the pinball loss as one pluggable `loss_fn`.",
+    "verification": {
+     "id": "codebase_readiness-05",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. neural.py:222-228 uses torch.randperm over rows. In k-space night rows are excluded (base.py:81-90). `_from_learning_target`/`_postprocess` (base.py:62-79) and `_as_site_mw` (policies.py:58-60) are numpy-only. SoC couples the hours (dispatch.py:112-123). A decision loss needs whole-day batches and differentiable post-processing, so this is necessary refactoring before Weeks 7-9."
+    }
+   },
+   {
+    "id": "codebase_readiness-06",
+    "title": "The dispatch LP exists only as hand-built scipy sparse matrices, with no cvxpy form to reuse for cvxpylayers",
+    "severity": "major",
+    "evidence": "dispatch.py builds A_eq, A_ub and the bounds through Python loops of rows, cols and vals (dispatch.py:76-125, 171-188) and solves with `linprog(method='highs')`. cvxpy, cvxpylayers, diffcp and a conic solver (clarabel or scs) are not installed in .venv. A pure LP through cvxpylayers has zero or undefined gradients almost everywhere, as the expos\u00e9 itself notes in Section 5. A 40-scenario layer has about 4.8k variables per day, which will be slow inside a training loop.",
+    "recommendation": "Write one cvxpy model builder whose `cp.Parameter`s are pv (S x T), the prices and the load, all DPP-compliant. Use it for both HiGHS evaluation and the cvxpylayers training layer. Add a test that the cvxpy objective equals `solve_commitment` to 1e-6 on random instances. Add a small quadratic regulariser (QPTL / Wilder et al. 2019) or log-barrier smoothing for the layer. Start with S=1 (deterministic) or a few scenarios in training, and benchmark the time per batch before Week 14.",
+    "verification": {
+     "id": "codebase_readiness-06",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. The LP is hand-assembled sparse COO plus linprog(method='highs') (dispatch.py:76-125, 200). cvxpy and cvxpylayers are not importable in .venv. The variable count is right: S=40, T=24 with c, d, soc, up, dn gives 4800 per-scenario variables plus 48. The expos\u00e9 itself flags the zero-gradient LP problem (Section 5, risks). Major is fair."
+    }
+   },
+   {
+    "id": "codebase_readiness-07",
+    "title": "The data layer is OPSD-only and hard-wired to a single zone and nationally aggregated PV; the expos\u00e9's Week 3-4 data step is now overdue",
+    "severity": "major",
+    "evidence": "opsd.py:22-39 has a fixed OPSD column map and an unpinned 'latest' URL. OPSD ends in September 2020 (cached design 2016-12-18 to 2020-09-30) and contains no imbalance prices. Site economics are synthetic: the national capacity factor is rescaled to a 2 MW nameplate (config.py:79, policies.py:58-60), the load profile is a fixed Gaussian shape (policies.py:77-85), and peak/off-peak tariffs are fixed (config.py:87-93). `newsvendor_quantile` uses only the off-peak price (policies.py:167). The transfer zones use 99.9th-percentile scaling computed over the full sample including test (opsd.py:219), a mild global-scale leak. data/raw is empty, so the pipeline cannot rebuild from source as the repo stands.",
+    "recommendation": "Add a `PriceSource` abstraction (ENTSO-E Transparency for day-ahead prices; reBAP/regelleistung.net or the ENTSO-E imbalance series for settlement), aligned to the OPSD 2015-2020 window or with a newer generation source. Pin the OPSD version URL (2020-10-06) and record checksums. Move zone, nameplate and load into per-zone config. Compute normalisation scales on train folds only. Write down the honest 'national aggregate as a proxy site' limitation now.",
+    "verification": {
+     "id": "codebase_readiness-07",
+     "verdict": "adjusted",
+     "severity": "major",
+     "reason": "Mostly correct. The OPSD-only COLUMN_MAP and unpinned 'latest' URL are at opsd.py:22-39. The 99.9th-percentile scale is computed over the full panel (opsd.py:~219). Load and tariffs are synthetic (policies.py:77-85, config.py:87-93), and newsvendor uses offpeak (policies.py:167). data/raw is empty. Two corrections. First, OPSD does carry day-ahead prices: COLUMN_MAP maps price_eur_mwh, and the cached DE panel has DE-LU day-ahead from 2018-09-30 to 2020-09-30, so only imbalance prices (and pre-Oct-2018 DA) are missing. Second, the pipeline can rebuild from source by downloading (the 'latest' URL still resolves to the final 2020 release), so 'cannot rebuild' overstates it, though pinning is still advisable. The 'overdue' timeline point is valid given week 6-7."
+    }
+   },
+   {
+    "id": "codebase_readiness-08",
+    "title": "Delivery days and the gate are defined in UTC, but the EPEX day-ahead gate is 12:00 CET/CEST",
+    "severity": "major",
+    "evidence": "configs/default.yaml:13 sets `gate_hour: 12 # (UTC)`. forecast_origin (features.py:29-35) normalises days in UTC. The real gate is 11:00 UTC in winter and 10:00 UTC in summer, so `y_at_origin`, `k_recent6` and the rolling features (features.py:137-142) read 1-2 hours of post-gate data. The delivery day is also 00-24 local time, which gives 23- or 25-hour days on DST switches. Yet the complete-day filter (features.py:167), the T=24 assumption (policies.py:66-74) and e2's `len(g) == horizon` (e2_dispatch.py:41) assume 24 UTC hours. Once real settlement prices are aligned to local delivery days, those days will mismatch.",
+    "recommendation": "Make the market timezone explicit (Europe/Berlin), compute the origin in local time and convert it to UTC, and allow T in {23, 24, 25} in the LP and the day batcher. Extend the parametrised leakage test with a DST date and a local-time gate. State the effect on the CS1 numbers in the thesis, since it is small but real.",
+    "verification": {
+     "id": "codebase_readiness-08",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. configs/default.yaml:13 sets gate_hour 12 '(UTC)'. forecast_origin normalises in UTC (features.py:29-35). y_at_origin and k_recent6 are read at that origin (features.py:139-142). The complete-day filter requires exactly 24 rows (features.py:167-169), and e2 requires len(g)==horizon (e2_dispatch.py:41). The EPEX DA gate is 12:00 CET/CEST, which is 11:00 or 10:00 UTC. The impact on CS1 forecasts is small: a 1-2 h optimistic information edge. The real cost comes from aligning local-day settlement prices, including 23/25-hour DST days, which makes this major for the thesis."
+    }
+   },
+   {
+    "id": "codebase_readiness-09",
+    "title": "Policy comparisons share one RNG stream, so adding a policy or model shifts the baseline numbers",
+    "severity": "major",
+    "evidence": "In e2_dispatch.py:52-64 a single `rng` is consumed sequentially by 'stochastic' and 'cvar' on every day, so the two policies see different scenario sets (no common random numbers). Inserting a new decision-focused policy, or changing the policy order, changes every later scenario draw. The 'baselines retained unchanged' that the expos\u00e9 promises (Section 5, Baselines) would then quietly move.",
+    "recommendation": "Derive the scenario RNG per (date, model) with `np.random.default_rng([seed, date_ordinal])`, generate scenarios once per day, and share them across all scenario-based policies. Freeze the CS1 baseline outputs (results/*.csv) with a regression test so you notice if they drift.",
+    "verification": {
+     "id": "codebase_readiness-09",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "The mechanism is correct. One rng is created per model (e2_dispatch.py:52) and consumed sequentially by stochastic and then cvar each day (policies.py:120-121), so there are no common random numbers and inserting a policy before them shifts later draws. The impact is Monte Carlo noise on a 40-scenario SAA averaged over 200 days, not a systematic bias. Baselines can also be preserved simply by appending new policies after the existing ones. Using CRN is good practice, but this is minor, not major."
+    }
+   },
+   {
+    "id": "codebase_readiness-10",
+    "title": "One leakage-test assertion is a tautology, and nothing tests that backtest folds are isolated",
+    "severity": "major",
+    "evidence": "tests/test_no_leakage.py:141-143 asserts `(origins - span <= origins).all()`, which is always true and checks nothing. No test covers `run_backtest` (for example that the fit data ends before calibration, or that test labels cannot influence fitted parameters), and no test exercises a custom-loss training path. The expos\u00e9 (Section 5) claims the guard will be 'extended to cover the new training path'. Nothing in the current suite would do that automatically.",
+    "recommendation": "Fix the LSTM assertion so it compares the latest timestamp actually used per sequence against the origin. Add a fold-isolation test: poison y in the test and calibration windows of a toy frame, fit each registry model (including the decision-focused ones), and assert identical train-fold predictions. Add the decision-layer poisoning test from finding 03.",
+    "verification": {
+     "id": "codebase_readiness-10",
+     "verdict": "adjusted",
+     "severity": "minor",
+     "reason": "Verified that `assert (origins - span <= origins).all()` (tests/test_no_leakage.py:143) is a tautology. Also verified that no test references run_backtest (only test_dispatch, test_metrics_and_conformal and test_no_leakage exist). However, the substantive leakage assertions (feature poisoning, lines 35-112) and the LSTM non-zero-history check are real. The missing decision-path test exists because that path has not been written yet, not because of a defect. Severity is minor (test hygiene plus a to-do), not major."
+    }
+   },
+   {
+    "id": "codebase_readiness-11",
+    "title": "The project is not under version control, and there is no lockfile",
+    "severity": "major",
+    "evidence": "`git status` in the project root returns 'fatal: not a git repository', although there is a .gitignore. pyproject.toml declares only lower bounds (numpy>=1.26, pandas>=2.1, torch>=2.2). The venv has numpy 2.4.6, pandas 3.0.5 and torch 2.14.0, so a fresh install could resolve to different majors (pandas 3 has copy-on-write semantics). The CS1 baseline cannot be tagged and cannot be reproduced exactly, which the expos\u00e9's 'retained unchanged' baselines and its reproducibility claim depend on.",
+    "recommendation": "Run `git init` and commit the current state as tag `cs1-final` before changing anything. Produce a lockfile (`uv lock` or `pip freeze > requirements.lock`). Add a `[project.optional-dependencies] dfl = [\"cvxpy>=1.5\", \"cvxpylayers\", \"diffcp\", \"clarabel\"]` extra and check that it installs on Python 3.11/arm64 next to numpy 2.4 and torch 2.14. scipy's bundled HiGHS is enough; highspy is only needed for warm starts.",
+    "verification": {
+     "id": "codebase_readiness-11",
+     "verdict": "confirmed",
+     "severity": "major",
+     "reason": "Verified. `git status` returns 'fatal: not a git repository'. There is no lockfile. pyproject.toml has only lower bounds, and torch is in the 'deep' extra. The .venv has numpy 2.4.6, pandas 3.0.5 and torch 2.14.0. Starting thesis changes with no snapshot of the CS1 baseline is a real, cheap-to-fix risk. Major is appropriate given the 'retained unchanged' baseline claim in expos\u00e9 Section 5."
+    }
+   },
+   {
+    "id": "codebase_readiness-12",
+    "title": "presentation/colab_bundle duplicates src, tests and data, a drift risk once the thesis code starts",
+    "severity": "minor",
+    "evidence": "`diff -rq src presentation/colab_bundle/src` currently shows only a .DS_Store difference. However, presentation/ holds 5.3 MB of bundled source and data, a 4.2 MB zip, and about 37 MB of mp4/pptx files. Any grep or refactor will hit two copies of `riskaware_pv`, and the Colab copy will go stale silently.",
+    "recommendation": "Move presentation/ (or at least colab_bundle, the zip and the videos) out of the working tree, or into a separate archived branch or tag. Regenerate the bundle with make_colab_bundle.py when it is needed instead of committing it. Remove the .DS_Store files and __pycache__ directories.",
+    "verification": {
+     "id": "codebase_readiness-12",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Verified sizes: colab_bundle 5.3M, zip 4.2M, and mp4s 17M + 14M + 5.9M plus pptx 1.1M (about 38 MB). The duplicate source tree is a drift and grep-noise risk. Minor is correct."
+    }
+   },
+   {
+    "id": "codebase_readiness-13",
+    "title": "The cheap decision-focused baseline (cost-weighted loss) has no hook in the GBM models",
+    "severity": "minor",
+    "evidence": "`GBMPoint.fit(X, y)` and `GBMQuantile.fit` (models/gbm.py:110, 161) take no sample_weight or custom objective. The expos\u00e9's first decision-focused variant (cost-weighted quantile loss, weeks 7-9) is easiest to build on LightGBM, which is the strongest CS1 model, via weights or a custom objective.",
+    "recommendation": "Add `sample_weight` passthrough and an optional `objective=callable` to the GBM classes, and set the quantile level from the newsvendor critical fractile per hour or price. That gives a decision-aware GBM baseline in days, before any torch work.",
+    "verification": {
+     "id": "codebase_readiness-13",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Verified. GBMPoint.fit and GBMQuantile.fit (gbm.py:110, 161) accept only (X, y), with no sample_weight or objective hook. This is a small, useful enabler for the Weeks 7-9 cost-weighted arm. Minor."
+    }
+   },
+   {
+    "id": "codebase_readiness-14",
+    "title": "Panel trimming depends on the in-process cache state, plus small hygiene issues",
+    "severity": "minor",
+    "evidence": "`_CAPACITY_REPORTED` is filled only when build_panel actually parses the CSV (opsd.py:109-111), so trimming to the reported-capacity window (opsd.py:202-209) is skipped when the panel comes from cache. For DE I checked that the rebuilt design index is identical (2016-12-18 to 2020-09-30, 33192 rows), but for new zones the outcome could depend on run order. `scale` and `ref_mae` are computed and never used (backtest.py:121-122). The OMP_NUM_THREADS=1 deadlock workaround (__init__.py:23-26) also pins torch to one thread, which will make cvxpylayers/torch training slow.",
+    "recommendation": "Persist the reported-capacity mask inside the cached panel, for example as a boolean column. Remove the dead variables. For decision-focused training, run torch in its own process without LightGBM loaded and raise torch.set_num_threads there.",
+    "verification": {
+     "id": "codebase_readiness-14",
+     "verdict": "confirmed",
+     "severity": "minor",
+     "reason": "Verified. `_CAPACITY_REPORTED` is populated only on CSV parse (opsd.py:109-111) and used for trimming (opsd.py:~202-209), so cached loads skip trimming. `scale` and `ref_mae` (backtest.py:121-122) are never used afterwards. OMP_NUM_THREADS etc. default to 1 in __init__.py:23-26. All are minor hygiene items."
+    }
+   }
+  ]
+ }
+]

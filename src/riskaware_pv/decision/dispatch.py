@@ -154,12 +154,20 @@ class DayPrices:
         a forecasting result.  It is ruled out when, every hour,
 
         * short is no cheaper than selling: ``short >= export``
+        * short is no cheaper than buying: ``short >= import``
         * long earns no more than buying costs: ``import + long >= 0``
+        * long earns no more than selling: ``export + long >= 0``
         * buying and selling the same hour does not pay: ``import >= export``
         * short and long at once does not pay: ``short + long >= 0``
+
+        Together these mean any short MWh can be replaced by a bought one, and
+        any long MWh by a sold one, at no loss, which also closes the route of
+        buying cheap, storing, and going long later.
         """
         bad = ((self.short_price < self.export_price - tol)
+               | (self.short_price < self.import_price - tol)
                | (self.import_price + self.long_price < -tol)
+               | (self.export_price + self.long_price < -tol)
                | (self.import_price < self.export_price - tol)
                | (self.short_price + self.long_price < -tol))
         return np.flatnonzero(bad)

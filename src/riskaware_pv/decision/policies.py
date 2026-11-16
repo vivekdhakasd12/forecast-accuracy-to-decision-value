@@ -94,8 +94,20 @@ def run_policy(
     cfg: Config,
     rng: np.random.Generator | None = None,
     fixed_quantile: float = 0.25,
+    prices: D.DayPrices | None = None,
+    settle_prices: D.DayPrices | None = None,
 ) -> dict:
-    """Commit under ``policy``, settle against ``actual``, return costs + regret."""
+    """Commit under ``policy``, settle against ``actual``, return costs + regret.
+
+    ``prices`` (default: the Case Study 1 synthetic tariff) are what is known
+    at the gate; every policy, the oracle included, commits with them.
+    ``settle_prices`` are the realised imbalance prices the final short/long
+    energy is billed at (e.g. ``DayPrices.single_price(da, rebap)``).
+
+    With realised settlement prices the "oracle" knows tomorrow's PV but not
+    tomorrow's imbalance price, so a lucky policy can beat it on a single day.
+    Regret is then only non-negative on average, not day by day.
+    """
     quantiles = np.asarray(cfg.forecast.quantiles, dtype=float)
     bat, mkt = cfg.battery, cfg.market
     hours, load = day_inputs["hours"], day_inputs["load"]
@@ -105,10 +117,10 @@ def run_policy(
 
     if policy == "oracle":
         commit = D.solve_commitment(pv_actual[None, :], load, hours, bat, mkt,
-                                    terminal_soc=terminal)
+                                    terminal_soc=terminal, prices=prices)
     elif policy == "point":
         commit = D.solve_commitment(_as_site_mw(point, bat)[None, :], load, hours,
-                                    bat, mkt, terminal_soc=terminal)
+                                    bat, mkt, terminal_soc=terminal, prices=prices)
     elif policy == "quantile":
         # Interpolate the predictive quantile function rather than snapping to the
         # nearest fitted level: snapping would make a sweep over commitment
@@ -119,19 +131,22 @@ def run_policy(
             for t in range(q_pred.shape[0])
         ])
         commit = D.solve_commitment(_as_site_mw(qcurve, bat)[None, :], load, hours,
-                                    bat, mkt, terminal_soc=terminal)
+                                    bat, mkt, terminal_soc=terminal, prices=prices)
     elif policy in ("stochastic", "cvar"):
         scen = scenarios_from_quantiles(q_pred, quantiles, mkt.n_scenarios, rng=rng)
         commit = D.solve_commitment(
             _as_site_mw(scen, bat), load, hours, bat, mkt,
             cvar_weight=0.5 if policy == "cvar" else 0.0,
-            cvar_alpha=mkt.cvar_alpha, terminal_soc=terminal,
+            cvar_alpha=mkt.cvar_alpha, terminal_soc=terminal, prices=prices,
         )
     else:
         raise ValueError(f"unknown policy {policy!r}")
 
+    # Fail loudly.  Case Study 1 returned NaN here, and a NaN day is silently
+    # skipped by a pandas mean while still being counted, which would bias every
+    # average towards the days the solver happened to like.
     if not commit.feasible:
-        return {"policy": policy, "status": commit.status, "total_cost": np.nan}
+        raise RuntimeError(f"{policy}: commitment LP not solved ({commit.status})")
 
     # The terminal state-of-charge obligation must be scored, not just planned.
     # Every commitment problem above enforces it; if settlement did not, a policy
@@ -141,7 +156,10 @@ def run_policy(
     # Settlement stays feasible because imbalance energy can always top the
     # battery up, at the penalty price, which is the correct economics.
     settled = D.evaluate_commitment(commit.schedule, pv_actual, load, hours, bat, mkt,
-                                    terminal_soc=terminal)
+                                    terminal_soc=terminal, prices=prices,
+                                    settle_prices=settle_prices)
+    if settled["status"] != "optimal":
+        raise RuntimeError(f"{policy}: settlement LP not solved ({settled['status']})")
     return {
         "policy": policy,
         "status": settled["status"],

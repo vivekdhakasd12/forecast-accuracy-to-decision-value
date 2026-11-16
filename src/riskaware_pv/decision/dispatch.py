@@ -73,20 +73,155 @@ def import_price_vector(hours: np.ndarray, market: MarketConfig) -> np.ndarray:
                      for h in hours], dtype=float)
 
 
+@dataclass
+class DayPrices:
+    """Hourly prices for one delivery day, all in EUR/MWh, expressed as *costs*.
+
+    ``import_price``  paid per MWh of committed import (``gp``)
+    ``export_price``  received per MWh of committed export (``gm``)
+    ``short_price``   paid per MWh short at settlement (``up``)
+    ``long_price``    paid per MWh long at settlement (``dn``); negative means
+                      the long energy is bought from you, as under single-price
+                      settlement
+
+    Case Study 1 used one fixed tariff (:meth:`from_market`).  The thesis needs
+    real, time-varying and possibly negative prices (:meth:`single_price`),
+    which is why everything below takes vectors.
+    """
+
+    import_price: np.ndarray
+    export_price: np.ndarray
+    short_price: np.ndarray
+    long_price: np.ndarray
+
+    def __post_init__(self) -> None:
+        for name in ("import_price", "export_price", "short_price", "long_price"):
+            arr = np.asarray(getattr(self, name), dtype=float)
+            if not np.all(np.isfinite(arr)):
+                raise ValueError(f"{name} contains NaN or inf; fill or drop the day first")
+            setattr(self, name, arr)
+
+    @classmethod
+    def from_market(cls, hours: np.ndarray, market: MarketConfig) -> "DayPrices":
+        """The Case Study 1 synthetic tariff (time-of-use import, flat penalties)."""
+        T = len(hours)
+        return cls(import_price=import_price_vector(hours, market),
+                   export_price=np.full(T, market.export_price),
+                   short_price=np.full(T, market.imbalance_penalty_up),
+                   long_price=np.full(T, market.imbalance_penalty_down))
+
+    @classmethod
+    def single_price(cls, day_ahead: np.ndarray, imbalance: np.ndarray) -> "DayPrices":
+        """Real market: trade at the day-ahead price, settle deviations at one
+        imbalance price (German reBAP).  Short pays it, long receives it."""
+        da = np.asarray(day_ahead, dtype=float)
+        imb = np.asarray(imbalance, dtype=float)
+        return cls(import_price=da, export_price=da.copy(),
+                   short_price=imb, long_price=-imb)
+
+    @classmethod
+    def dual_price(cls, day_ahead: np.ndarray, penalty_short: float,
+                   penalty_long: float) -> "DayPrices":
+        """Stylised asymmetric settlement around a real day-ahead price:
+        short is bought back at DA + penalty, long is sold at DA - penalty."""
+        da = np.asarray(day_ahead, dtype=float)
+        return cls(import_price=da, export_price=da.copy(),
+                   short_price=da + penalty_short, long_price=-(da - penalty_long))
+
+    @classmethod
+    def gate_view(cls, day_ahead: np.ndarray) -> "DayPrices":
+        """What a price-taker knows at the gate under single-price settlement.
+
+        The day-ahead price is known (it clears around the gate); the imbalance
+        price is not.  With no view on it, its expectation is the day-ahead
+        price, so this is :meth:`single_price` with ``imbalance = day_ahead``.
+        Use it to *commit*, and settle with the realised imbalance price.
+        """
+        da = np.asarray(day_ahead, dtype=float)
+        return cls.single_price(da, da.copy())
+
+    def check(self, T: int) -> None:
+        for name in ("import_price", "export_price", "short_price", "long_price"):
+            if getattr(self, name).shape != (T,):
+                raise ValueError(f"{name} has shape {getattr(self, name).shape}, expected ({T},)")
+
+    def speculation_hours(self, tol: float = 1e-9) -> np.ndarray:
+        """Hours where a schedule can make money by being *deliberately* off.
+
+        If deviating is cheaper than trading, the optimiser stops forecasting
+        and starts speculating on the spread, bounded only by the grid limit.
+        That is illegal for a German balance responsible party, and it is never
+        a forecasting result.  It is ruled out when, every hour,
+
+        * short is no cheaper than selling: ``short >= export``
+        * long earns no more than buying costs: ``import + long >= 0``
+        * buying and selling the same hour does not pay: ``import >= export``
+        * short and long at once does not pay: ``short + long >= 0``
+        """
+        bad = ((self.short_price < self.export_price - tol)
+               | (self.import_price + self.long_price < -tol)
+               | (self.import_price < self.export_price - tol)
+               | (self.short_price + self.long_price < -tol))
+        return np.flatnonzero(bad)
+
+
+def _prices(hours: np.ndarray, market: MarketConfig, prices: DayPrices | None) -> DayPrices:
+    p = DayPrices.from_market(hours, market) if prices is None else prices
+    p.check(len(hours))
+    return p
+
+
+def grid_limits(bat: BatteryConfig, load: np.ndarray, pv: np.ndarray
+                ) -> tuple[float, float, float]:
+    """Upper bounds on committed import, committed export and imbalance (MWh/h).
+
+    With a fixed positive tariff these never bind: no sensible schedule imports
+    more than load plus a full charge, or exports more than PV plus a full
+    discharge.  They exist because real prices can be negative, and an LP with
+    a negative price on an unbounded variable has no solution at all.
+    """
+    import_max = bat.grid_import_max_mw
+    if import_max is None:
+        import_max = float(np.max(load)) + bat.power_mw
+    export_max = bat.grid_export_max_mw
+    if export_max is None:
+        export_max = max(bat.pv_nameplate_mw, float(np.max(pv))) + bat.power_mw
+    imbalance_max = (float(np.max(load)) + float(np.max(pv)) + import_max + export_max
+                     + 2.0 * bat.power_mw)
+    return float(import_max), float(export_max), float(imbalance_max)
+
+
+def _limits_apply(bat: BatteryConfig, prices: DayPrices | None) -> bool:
+    """Bounds are switched on for explicit prices or explicit grid limits.
+
+    They are left off on the plain Case Study 1 path on purpose.  The
+    deterministic commitment LP has *tied* optima (several schedules with the
+    same planned cost, e.g. when to charge from cheap off-peak import), and any
+    change to the bounds lets HiGHS pick a different one.  The planned cost is
+    identical, but the settled cost against realised PV is not, so adding even
+    non-binding bounds would shift the published Case Study 1 numbers.
+    """
+    return (prices is not None or bat.grid_import_max_mw is not None
+            or bat.grid_export_max_mw is not None)
+
+
 def _battery_bounds(bat: BatteryConfig, T: int, S: int, v: _Vars,
                     i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm,
-                    extra: int = 0) -> list[tuple[float, float | None]]:
+                    extra: int = 0,
+                    limits: tuple[float, float, float] | None = None,
+                    ) -> list[tuple[float, float | None]]:
+    imp_max, exp_max, imb_max = limits if limits is not None else (None, None, None)
     bounds: list[tuple[float, float | None]] = [(None, None)] * (v.n + extra)
     for t in range(T):
-        bounds[i_gp[t]] = (0.0, None)
-        bounds[i_gm[t]] = (0.0, None)
+        bounds[i_gp[t]] = (0.0, imp_max)
+        bounds[i_gm[t]] = (0.0, exp_max)
     for s in range(S):
         for t in range(T):
             bounds[i_c[s, t]] = (0.0, bat.power_mw)
             bounds[i_d[s, t]] = (0.0, bat.power_mw)
             bounds[i_soc[s, t]] = (bat.soc_min * bat.energy_mwh, bat.soc_max * bat.energy_mwh)
-            bounds[i_up[s, t]] = (0.0, None)
-            bounds[i_dn[s, t]] = (0.0, None)
+            bounds[i_up[s, t]] = (0.0, imb_max)
+            bounds[i_dn[s, t]] = (0.0, imb_max)
     return bounds
 
 
@@ -135,6 +270,8 @@ def solve_commitment(
     cvar_weight: float = 0.0,
     cvar_alpha: float | None = None,
     terminal_soc: float | None = None,
+    prices: DayPrices | None = None,
+    allow_speculation: bool = False,
 ) -> DispatchResult:
     """Stage-1 commitment under a set of PV scenarios.
 
@@ -148,6 +285,13 @@ def solve_commitment(
     load = np.asarray(load, dtype=float)
     alpha = market.cvar_alpha if cvar_alpha is None else cvar_alpha
     w = np.full(S, 1.0 / S) if weights is None else np.asarray(weights) / np.sum(weights)
+    pr = _prices(hours, market, prices)
+    bad = pr.speculation_hours()
+    if bad.size and not allow_speculation:
+        raise ValueError(
+            f"commitment prices reward deliberate imbalance in hours {bad.tolist()}; "
+            "commit with prices known at the gate (DayPrices.gate_view) and pass the "
+            "realised imbalance price only to settlement")
 
     v = _Vars()
     i_gp = v.add("gp", (T,)); i_gm = v.add("gm", (T,))
@@ -159,7 +303,10 @@ def solve_commitment(
         i_z = v.add("z", (S,))
     n_cols = v.n
 
-    bounds = _battery_bounds(battery, T, S, v, i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm)
+    limits = (grid_limits(battery, load, pv_scenarios) if _limits_apply(battery, prices)
+              else None)
+    bounds = _battery_bounds(battery, T, S, v, i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm,
+                             limits=limits)
     if use_cvar:
         bounds[i_eta] = (None, None)
         for s in range(S):
@@ -180,21 +327,20 @@ def solve_commitment(
             for t in range(T):
                 rows += [r, r]
                 cols += [i_up[s, t], i_dn[s, t]]
-                vals += [market.imbalance_penalty_up, market.imbalance_penalty_down]
+                vals += [pr.short_price[t], pr.long_price[t]]
             rows += [r, r]; cols += [i_eta, i_z[s]]; vals += [-1.0, -1.0]
             b_ub.append(0.0)
             r += 1
     A_ub = sparse.coo_matrix((vals, (rows, cols)), shape=(r, n_cols)).tocsr() if r else None
     b_ub_arr = np.array(b_ub, dtype=float) if r else None
 
-    p_imp = import_price_vector(hours, market)
     c = np.zeros(n_cols)
-    c[i_gp] = p_imp
-    c[i_gm] = -market.export_price
+    c[i_gp] = pr.import_price
+    c[i_gm] = -pr.export_price
     recourse_w = (1.0 - cvar_weight) if use_cvar else 1.0
     for s in range(S):
-        c[i_up[s, :]] = recourse_w * w[s] * market.imbalance_penalty_up
-        c[i_dn[s, :]] = recourse_w * w[s] * market.imbalance_penalty_down
+        c[i_up[s, :]] = recourse_w * w[s] * pr.short_price
+        c[i_dn[s, :]] = recourse_w * w[s] * pr.long_price
     if use_cvar:
         c[i_eta] = cvar_weight
         c[i_z] = cvar_weight * w / (1.0 - alpha)
@@ -208,7 +354,7 @@ def solve_commitment(
     x = res.x
     gp, gm = x[i_gp], x[i_gm]
     up, dn = x[i_up], x[i_dn]
-    scen_cost = (up * market.imbalance_penalty_up + dn * market.imbalance_penalty_down).sum(1)
+    scen_cost = (up * pr.short_price + dn * pr.long_price).sum(1)
     return DispatchResult(
         status="optimal", objective=float(res.fun), schedule=gp - gm,
         import_mwh=gp, export_mwh=gm, charge=x[i_c], discharge=x[i_d], soc=x[i_soc],
@@ -225,17 +371,25 @@ def evaluate_commitment(
     battery: BatteryConfig,
     market: MarketConfig,
     terminal_soc: float | None = None,
+    prices: DayPrices | None = None,
+    settle_prices: DayPrices | None = None,
 ) -> dict:
     """Stage-2 only: settle a *fixed* commitment against the realised PV.
 
     This is the honest scoring step -- the schedule was chosen without knowing
     ``pv_actual``, and the operator now pays for whatever mismatch remains after
     the battery has done its best.
+
+    ``prices`` are what the operator knows and steers the battery by.
+    ``settle_prices``, if given, are the realised imbalance prices the
+    resulting short/long energy is finally billed at.  Keeping them apart stops
+    the battery from trading on an imbalance price nobody knows in advance.
     """
     schedule = np.asarray(schedule, dtype=float)
     pv = np.atleast_2d(np.asarray(pv_actual, dtype=float))
     T = len(schedule)
     S = 1
+    pr = _prices(hours, market, prices)
 
     v = _Vars()
     i_gp = v.add("gp", (T,)); i_gm = v.add("gm", (T,))
@@ -243,7 +397,14 @@ def evaluate_commitment(
     i_up = v.add("up", (S, T)); i_dn = v.add("dn", (S, T))
     n_cols = v.n
 
-    bounds = _battery_bounds(battery, T, S, v, i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm)
+    limits = None
+    if _limits_apply(battery, prices) or settle_prices is not None:
+        imp_max, exp_max, imb_max = grid_limits(battery, load, pv)
+        # the committed schedule itself may sit at the grid limit, so the
+        # imbalance bound must also cover the schedule's own size
+        limits = (imp_max, exp_max, imb_max + float(np.max(np.abs(schedule))))
+    bounds = _battery_bounds(battery, T, S, v, i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm,
+                             limits=limits)
     for t in range(T):  # stage-1 decision is frozen
         bounds[i_gp[t]] = (0.0, 0.0)
         bounds[i_gm[t]] = (0.0, 0.0)
@@ -257,26 +418,32 @@ def evaluate_commitment(
         b_ub = np.array([-terminal_soc * battery.energy_mwh])
 
     c = np.zeros(n_cols)
-    c[i_up[0, :]] = market.imbalance_penalty_up
-    c[i_dn[0, :]] = market.imbalance_penalty_down
+    c[i_up[0, :]] = pr.short_price
+    c[i_dn[0, :]] = pr.long_price
     res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds,
                   method="highs")
 
-    p_imp = import_price_vector(hours, market)
-    day_ahead_cost = float(np.sum(np.maximum(schedule, 0) * p_imp)
-                           - np.sum(np.maximum(-schedule, 0) * market.export_price))
+    day_ahead_cost = float(np.sum(np.maximum(schedule, 0) * pr.import_price)
+                           - np.sum(np.maximum(-schedule, 0) * pr.export_price))
     if not res.success:
         return {"status": "infeasible", "total_cost": np.inf,
                 "day_ahead_cost": day_ahead_cost, "imbalance_cost": np.inf,
                 "energy_short_mwh": np.nan, "energy_long_mwh": np.nan}
     x = res.x
+    up, dn = x[i_up[0, :]], x[i_dn[0, :]]
+    if settle_prices is None:
+        imbalance_cost = float(res.fun)
+    else:
+        settle_prices.check(T)
+        imbalance_cost = float(np.sum(up * settle_prices.short_price
+                                      + dn * settle_prices.long_price))
     return {
         "status": "optimal",
         "day_ahead_cost": day_ahead_cost,
-        "imbalance_cost": float(res.fun),
-        "total_cost": day_ahead_cost + float(res.fun),
-        "energy_short_mwh": float(x[i_up[0, :]].sum()),
-        "energy_long_mwh": float(x[i_dn[0, :]].sum()),
+        "imbalance_cost": imbalance_cost,
+        "total_cost": day_ahead_cost + imbalance_cost,
+        "energy_short_mwh": float(up.sum()),
+        "energy_long_mwh": float(dn.sum()),
         "soc": x[i_soc[0, :]],
         "charge": x[i_c[0, :]],
         "discharge": x[i_d[0, :]],
@@ -285,8 +452,9 @@ def evaluate_commitment(
 
 def oracle_cost(pv_actual: np.ndarray, load: np.ndarray, hours: np.ndarray,
                 battery: BatteryConfig, market: MarketConfig,
-                terminal_soc: float | None = None) -> float:
+                terminal_soc: float | None = None,
+                prices: DayPrices | None = None) -> float:
     """Perfect-foresight cost: the unattainable lower bound that defines regret."""
     res = solve_commitment(np.atleast_2d(pv_actual), load, hours, battery, market,
-                           terminal_soc=terminal_soc)
+                           terminal_soc=terminal_soc, prices=prices)
     return float(res.objective) if res.feasible else float("inf")

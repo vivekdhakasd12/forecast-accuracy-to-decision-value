@@ -1,0 +1,284 @@
+[
+ {
+  "lens": "lp",
+  "findings": [
+   {
+    "id": "lp-1",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 135,
+    "severity": "high",
+    "summary": "gate_view commitment prices make the commitment LP fully degenerate. Planned cost becomes da\u00b7(load \u2212 pv \u2212 d + c) whatever the schedule, so HiGHS returns an arbitrary vertex: usually the schedule sits at the grid_limits bound and the plan deliberately runs maximal imbalance. The speculation check passes because it only refuses strict profits, not ties.",
+    "failure_scenario": "With single_price/gate_view, import=export=da, short=da and long=\u2212da, so every check condition holds with equality. Test fixture: hours 0..23, CS1 battery, da from _real_like_prices, gate_view(da) to commit, single_price(da, imb) to settle. solve_commitment on PV forecasts scaled 0.0, 0.5 and 1.0 returns the same schedule, gm=3.0 MW (export_max) every hour: 72 MWh committed export for a 2 MW plant, with 85.7 MWh settled short. run_policy gives byte-identical results for oracle, point and quantile (total \u2212109.01). stochastic gives 826.99, with 52.8 MWh committed import and 283 MWh long; cvar gives 374.36. Policy rankings and regret are therefore solver tie-break noise times (reBAP \u2212 DA). Any spread between them is set by the size of the grid bound, not by forecast quality. Under single-price settlement with E[reBAP]=DA, a risk-neutral commitment has no forecast signal at all, so the thesis' DFL comparison on this path measures nothing.",
+    "fix": "Do not commit on gate_view alone. Add a strictly positive deviation cost (e.g. dual_price around DA with calibrated penalties, or an explicit expected |reBAP \u2212 DA| spread / risk term). Alternatively, tie-break with a small penalty on up+dn and on gp+gm. Also make speculation_hours (or a separate check) flag ties where deviating costs exactly the same as trading. Add a test that the commitment changes with the forecast under the real-price path.",
+    "v": {
+     "id": "lp-1",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reason": "Reproduced. With gate_view(da), import=export=da, short=da and long=-da, so the planned cost is da*(gp-gm+up-dn) = da*(load-pv-d+c), which does not depend on the schedule. solve_commitment on PV scaled by 0, 0.5 and 1.0 returns schedule=-3.0 (export at the grid bound) every hour. Only the objective changes. run_policy with gate_view to commit and single_price(da, imb) to settle gives identical results for oracle, point and quantile (total -109.01, 72 MWh export, 85.74 MWh short). Stochastic gives 826.99 (52.8 MWh import, 283.2 MWh long) and cvar gives 374.36. The rankings and regret are tie-break noise scaled by (reBAP-DA) and the size of the grid bound. They carry no forecast signal."
+    }
+   },
+   {
+    "id": "lp-2",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 399,
+    "severity": "high",
+    "summary": "Under gate_view steering prices, the settlement LP has short+long = 0, so up and dn in the same hour cost nothing. The new imb_max upper bound lets the non-basic one sit at the bound, which inflates reported short/long energy. Under any non-single-price settle_prices this also inflates the billed cost by orders of magnitude.",
+    "failure_scenario": "Commit 'stochastic' with gate_view(da) (40 scenarios, rng 3; schedule = +2.2 every hour), then evaluate_commitment against 0.6\u00b7pv. The result has energy_short_mwh=244.1 and energy_long_mwh=283.2, although the net mismatch is only about 40 MWh. dn sits near the 12.6 MWh/h bound and the battery charges and discharges simultaneously in hours 9, 10 and 15. With settle_prices=single_price the up/dn pair happens to cancel in cost, but the energy metrics in run_policy are garbage. With settle_prices=dual_price(da, 80, 30), imbalance_cost=25,950 EUR for one day. The battery also deviates deliberately from the frozen schedule to arbitrage DA spreads, and those deviations are billed at realised reBAP. So the settled cost depends on tie-breaking, not only on forecast error.",
+    "fix": "In settlement, add a small epsilon cost on up+dn (and on c+d), or net imbalance into one free variable split afterwards. Steer the battery with prices whose short+long > 0, or minimise |imbalance| lexicographically before billing at settle_prices.",
+    "v": {
+     "id": "lp-2",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reason": "Reproduced. The stochastic commitment under gate_view is +2.2 every hour. evaluate_commitment against 0.6*pv reports energy_short=244.14 and energy_long=283.2 MWh, while the net |mismatch| is only 39.7 MWh. The battery charges and discharges in the same hour in hours 9, 10, 14 and 15. Settled with single_price the imbalance cost is -1849.5. With dual_price(da, 80, 30) it is 25,950.8 EUR. The short/long metrics and any non-single-price billing depend on degenerate LP ties, because short+long=0 under the steering prices and imb_max lets up and dn grow together at no cost."
+    }
+   },
+   {
+    "id": "lp-3",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 158,
+    "severity": "medium",
+    "summary": "speculation_hours misses two necessary conditions: short >= import (being short is no cheaper than buying) and export + long >= 0 (being long earns no more than selling). For any tariff with import != export, the LP is therefore still allowed to plan deliberate imbalance instead of trading.",
+    "failure_scenario": "Case 1: DayPrices(import=300, export=50, short=200, long=10) gives speculation_hours()=[]. solve_commitment on the exact PV then commits 0 MWh import and plans 7.7 MWh short against an 11.1 MWh need. Case 2: DayPrices(import=300, export=50, short=400, long=\u2212100) also passes. The LP then commits 0 MWh export and plans long instead. These prices are asymmetric retail/feed-in tariffs (import > export) around a reBAP-like settlement, which DayPrices accepts directly or via from_market with an edited MarketConfig. With the battery, the conditions as written are also not enough to stop multi-hour shifting: buy cheap, store, then go long when \u2212long > export.",
+    "fix": "Add (short < import \u2212 tol) and (export + long < \u2212tol) to the bad mask. Together with the existing four, any up can then be replaced by gp, and any dn by gm, at no loss in every hour. That also closes the battery multi-hour route.",
+    "v": {
+     "id": "lp-3",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "Reproduced. Both DayPrices(300,50,200,10) and DayPrices(300,50,400,-100) pass speculation_hours() with an empty result. In case 1, with exact PV, the commitment buys 0 MWh and plans 7.71 MWh short instead, because short (200) is cheaper than import (300). In case 2 it plans 0.37 MWh long instead of exporting, because long pays 100 against an export price of 50. The guard is missing the conditions short>=import and export+long>=0. The shipped constructors (from_market with the CS1 values, gate_view, dual_price) do not hit this, which is why the severity stays medium. DayPrices still accepts such tariffs directly, and the guard claims to rule them out."
+    }
+   },
+   {
+    "id": "lp-4",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 231,
+    "severity": "medium",
+    "summary": "There is no PV curtailment (or spill) variable, so under the negative real prices this change enables, the LP must pay to export or go long with surplus PV. It then burns energy through simultaneous charge and discharge, which is a new LP artefact that positive CS1 prices never triggered. Costs on negative-price days are overstated for every policy and for the oracle.",
+    "failure_scenario": "dual_price(da, 80, 30), with da reaching \u221260 at midday, CS1 battery, exact PV. The commitment exports 0.25 and 0.5 MWh at \u221219 and \u221241 EUR/MWh (hours 9 and 10). It also runs c=1.0 and d=0.9 in the same hour (hours 9, 10, 15) to dissipate about 0.1 MWh/h through losses. A German PV plant (direct marketing, \u00a751 EEG) would curtail. With SMARD prices down to \u2212500 EUR/MWh, this spurious disposal cost dominates those days and distorts regret and policy rankings.",
+    "fix": "Add a curtailment variable 0 <= k_t <= pv_t (per scenario and in settlement) to the balance at zero cost, or at lost-subsidy cost. Optionally forbid simultaneous c/d via a tiny cost on c+d.",
+    "v": {
+     "id": "lp-4",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "Reproduced with dual_price(da, 80, 30) and exact PV. The commitment exports 0.25 MWh at -19 EUR/MWh in hour 9 and 0.5 MWh at -41.2 in hour 10, plus 0.21 MWh in hour 15. It also runs c=1.0 and d=0.9 at once in hours 9, 10 and 15 to burn surplus through losses. The model has no curtailment variable, so surplus PV on negative-price hours must be paid away or dissipated. A real plant would curtail. This overstates costs on negative-price days for every policy and for the oracle."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "data",
+  "findings": [
+   {
+    "id": "data-1",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 158,
+    "summary": "The cached-panel early return ignores with_imbalance and never re-checks whether reBAP data has since become available. The all-NaN imbalance column written when no reBAP source existed is served from then on.",
+    "failure_scenario": "The current data/interim/smard_de_panel.parquet has imbalance_price_eur_mwh entirely NaN (68,664 of 68,664 rows), because no data/raw/rebap directory and no NTP_* credentials existed at build time. Once the user sets NTP_CLIENT_ID/SECRET or drops reBAP CSVs into data/raw/rebap, build_de_panel() and load_site_series_smard() (which cannot pass force through for imbalance) still return the cached frame with the NaN column. Imbalance settlement then silently has no prices, or NaNs propagate into evaluation, until someone happens to pass force=True. A partially covered rebuild (CSVs for a few months only) is also cached without any warning about coverage.",
+    "severity": "high",
+    "fix": "On the cache path, rebuild (or at least re-merge the imbalance column) when with_imbalance is true and the cached column is all or mostly NaN while a reBAP source now exists. Log or raise on the reBAP coverage share instead of silently writing NaN. Alternatively, keep imbalance out of the cached parquet and join it fresh on every call.",
+    "v": {
+     "id": "data-1",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "smard.py:164-168 returns the cached parquet whenever it covers [start,end]. It never looks at with_imbalance or at whether the imbalance column is usable. The current panel has imbalance_price_eur_mwh NaN in all 68,664 rows. There is no data/raw/rebap directory, and .env sets no NTP keys. Adding CSVs or keys later has no effect without force=True. load_site_series_smard only passes force, and with_imbalance=False followed by True serves a frame without the column at all. The default call path behaves exactly as described. I rate it medium rather than high because the NaN column is visible and is not yet used to produce results."
+    }
+   },
+   {
+    "id": "data-2",
+    "file": "src/riskaware_pv/data/imbalance.py",
+    "line": 84,
+    "summary": "pd.to_datetime(format=\"mixed\", dayfirst=True) parses ISO dates as YYYY-DD-MM whenever the day is 12 or less. Any reBAP file with ISO 'Datum' values is silently shifted by months.",
+    "failure_scenario": "Verified with pandas 3.0.5: '2024-01-02' parses to 2024-02-01, while '2024-01-13' parses correctly to 2024-01-13. A CSV (API or manual) using ISO dates puts the quarter hours of Jan 2 on Feb 1. dedup keep='last' then overwrites the genuine Feb 1 prices, and Jan 2 ends up missing. No error is raised, so the imbalance price series is scrambled for the first 12 days of every month.",
+    "severity": "medium",
+    "fix": "Detect the format explicitly: use format='%d.%m.%Y' when the value matches \\d{2}\\.\\d{2}\\.\\d{4}, otherwise format='ISO8601'. Assert that the parsed quarter hours are contiguous within each file.",
+    "v": {
+     "id": "data-2",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "Reproduced with pandas 3.0.5. pd.to_datetime(['2024-01-02','2024-01-13'], format='mixed', dayfirst=True) gives 2024-02-01 and 2024-01-13. German-format dates ('02.01.2024') parse correctly. Any ISO-dated file is therefore silently scrambled for days 1-12, and dedup keep='last' then overwrites the genuine dates. format='mixed' was chosen precisely to accept both styles, so the parser's own contract is broken. The defect is latent if Netztransparenz always emits dd.mm.yyyy."
+    }
+   },
+   {
+    "id": "data-3",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 203,
+    "summary": "The capacity-factor target (SMARD feed-in divided by Energy-Charts 'Solar DC' nameplate) has a strong downward bookkeeping trend, so the claim that normalisation removes the capacity trend is false. Scaling it to a site nameplate also understates site output by about 30-45%.",
+    "failure_scenario": "On the cached panel, the 99.9% quantile of solar_mw/solar_capacity_mw falls every year: 0.62 (2019), 0.63 (2020), 0.59, 0.58, 0.53, 0.49, 0.46 (2025), 0.44 (2026). Annual mean CF drops from 0.100 to 0.077. The causes are that SMARD 4068 is grid feed-in (excluding self-consumption, with a growing share of new rooftop systems capped at 60% feed-in), and that DC nameplate grows faster than AC feed-in. Effects: _as_site_mw (CF * pv_nameplate_mw) gives a utility plant a peak of about 0.45 of nameplate in 2025, so commitment revenue and imbalance exposure are understated. The concept-drift and train/test split also see a spurious level shift that a model fit on 2019-2022 data will mis-predict in 2024-2025.",
+    "severity": "medium",
+    "fix": "Normalise by a quantity consistent with feed-in, for example 'Solar AC' plus a rolling empirical clear-sky peak rescale (each month's CF divided by its high quantile), or rescale per year so that the peak CF is stationary. At minimum, document the drift and check stationarity of the target before the drift experiments.",
+    "v": {
+     "id": "data-3",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "Reproduced on the cached panel. The 99.9% CF quantile by year is 0.618, 0.626, 0.592, 0.575, 0.533, 0.489, 0.456, 0.44 (2019-2026), and the mean CF falls from 0.100 to about 0.077. The load_site_series_smard docstring says normalising by DC capacity removes the bookkeeping trend; the data shows a strong residual trend. policies._as_site_mw multiplies CF by pv_nameplate_mw, so a modelled 2025 site peaks at about 0.46 of nameplate. Revenue and imbalance volumes are understated, and the train/test level shift distorts the drift experiments."
+    }
+   },
+   {
+    "id": "data-4",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 64,
+    "summary": "Study-window boundaries are UTC instants and do not line up with German local delivery days. Downstream code groups days by UTC normalize(), so every 'day' straddles two auction delivery days, and DEFAULT_END pulls in 15-minute-era hours.",
+    "failure_scenario": "DEFAULT_END = '2025-09-30 23:00' UTC is 01:00 local on Oct 1. The rows at 2025-09-30 22:00 and 23:00 UTC belong to delivery day 2025-10-01, the first 15-minute-product day, and their SMARD hourly price is an average of quarter-hour prices. That contradicts the stated intent to stop before 2025-10-01. DEFAULT_START '2019-01-01' UTC similarly drops local hour 00:00 of Jan 1. More generally, features.py, error_decomposition and drift/policies group by index.normalize() in UTC, so a 'day-ahead commitment day' covers local 01:00/02:00 to 01:00/02:00 the next day. The 22:00-23:59 UTC hours priced in auction D+1 (gate at 12:00 local on D) are therefore settled together with day D.",
+    "severity": "low",
+    "fix": "Define the window in Europe/Berlin (start = 2019-01-01 00:00 local, end = 2025-09-30 23:00 local, converted to UTC). Build delivery days with index.tz_convert('Europe/Berlin').normalize(), or explicitly document that days are UTC days.",
+    "v": {
+     "id": "data-4",
+     "verdict": "refuted",
+     "reason": "The concrete failing scenario does not match the current code. DEFAULT_END is now '2026-10-31 23:00'. The window deliberately includes the 15-minute period, and AUCTION_15MIN_FROM marks the switch, so nothing 'contradicts the stated intent to stop before 2025-10-01'. Grouping days in UTC is the same convention the existing OPSD pipeline uses throughout, and is consistent there. No concrete wrong result or leakage was shown: committing local hours 00-01 of D+1 at the D-1 gate is earlier than needed, i.e. conservative, not a leak. Dropping local 00:00 on Jan 1 is immaterial."
+    }
+   },
+   {
+    "id": "data-5",
+    "file": "src/riskaware_pv/data/imbalance.py",
+    "line": 123,
+    "summary": "download_rebap caches each month permanently on first fetch, including months whose quality-assured data is not yet (fully) published. A partial or empty month is then frozen and never re-downloaded.",
+    "failure_scenario": "A user builds with an end date within the last one to two months. The Qualitaetsgesichert endpoint returns a partial month, or only a header, and it is written to rebap_YYYY-MM.csv. Every later call skips that file because path.exists(), so those hours stay NaN in the panel permanently (load_rebap_hourly sets hours with fewer than 4 quarter hours to NaN) unless refresh is passed, and load_rebap does not expose refresh. An empty body would make pd.read_csv raise EmptyDataError and crash build_de_panel, which only catches FileNotFoundError.",
+    "severity": "low",
+    "fix": "Cache a month only when it lies entirely in the past by a safe lag and contains the expected number of quarter hours (about 4*24*days). Otherwise keep it uncached, as smard.py does for incomplete weeks.",
+    "v": {
+     "id": "data-5",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reason": "download_rebap writes every month the first time it is fetched and afterwards skips it if path.exists(). load_rebap and build_de_panel do not expose refresh. With the current DEFAULT_END of 2026-10-31 and today's date of 2026-11-16, a first API build would fetch October 2026 from the Qualitaetsgesichert endpoint. That month is almost certainly not fully quality-assured yet, so a partial month would be frozen and its hours would stay NaN for good. An empty response body would make pd.read_csv raise EmptyDataError, which build_de_panel does not catch (it only catches FileNotFoundError). Not exercised yet because no credentials are configured."
+    }
+   },
+   {
+    "id": "data-6",
+    "file": "src/riskaware_pv/data/opsd.py",
+    "line": 141,
+    "summary": "_quality_control's interpolate(limit=3, limit_area='inside') does not restrict filling to gaps of 3 hours or less. It fills the first 3 hours of every longer gap as well, contrary to the 'micro-gaps only' contract that the SMARD panel now relies on.",
+    "failure_scenario": "If a 10-hour NaN gap appears in solar_mw or price_eur_mwh (for example a SMARD outage, or a week whose values were still null when fetched), pandas fills hours 1-3 with a linear ramp toward the far endpoint and leaves 4-10 NaN. That manufactures partial values next to a real outage. The current SMARD cache has no NaNs, so it is latent today. Also note that the comment in smard.py about zeros at DST switches is wrong: the 182 zero prices (for example 8 h on 2024-03-24) are genuine market zeros and are correctly left alone.",
+    "severity": "low",
+    "fix": "Mask NaN runs longer than 3 before interpolating, for example run lengths via (s.isna() != s.isna().shift()).cumsum() and fill only runs with length <= 3.",
+    "v": {
+     "id": "data-6",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reason": "Verified: pd.Series([1,nan*10,12]).interpolate(limit=3, limit_area='inside') fills the first 3 NaNs with 2, 3, 4 and leaves the rest NaN. Any gap longer than 3 hours gets a fabricated partial ramp, which contradicts the 'micro-gaps only' docstring that the SMARD panel relies on. It is latent today because the cached SMARD panel has no NaNs in the interpolated columns."
+    }
+   },
+   {
+    "id": "data-7",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 120,
+    "summary": "Weekly file selection assumes every SMARD week lasts exactly 168 h. Weeks start on Monday 00:00 Europe/Berlin, so the autumn-DST week lasts 169 h and its last hour can be skipped.",
+    "failure_scenario": "The week starting 2023-10-22 22:00 UTC ends at 2023-10-29 23:00 UTC (169 h). With start='2023-10-29 22:00' UTC, the test s + _WEEK_MS > t0 is false, so that week is not fetched. The next file starts at 23:00, so the first panel row is NaN and _longest_valid_span drops it. The same 168 h assumption also governs the 'complete' caching test. Separately, the index_hour.json lookup is never cached, so an offline force rebuild fails even when every weekly file is on disk.",
+    "severity": "low",
+    "fix": "Use s + _WEEK_MS + 3_600_000 > t0 (or select the last stamp <= t0 plus all later ones up to t1). Cache the index JSON, falling back to it when the network is unavailable.",
+    "v": {
+     "id": "data-7",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reason": "The cached 4068 file stamps show 169 h weeks every October (for example the week starting 2019-10-20 22:00 UTC) and 167 h weeks every March. With t0 exactly at the last hour of an autumn week (for example start='2023-10-29 22:00'), s + 168h > t0 is false. That week is skipped, so the first row is NaN and _longest_valid_span drops it. The index_hour.json lookup always goes to the network through _get_json, so a rebuild fails offline even though every weekly file is cached. Default windows are unaffected, so this is low severity."
+    }
+   }
+  ]
+ },
+ {
+  "lens": "leak",
+  "findings": [
+   {
+    "id": "leak-1",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 81,
+    "severity": "high",
+    "summary": "DayPrices.gate_view (short=DA, long=-DA) makes every commitment cost the same, so the forecast has no effect on the schedule. HiGHS breaks the tie by committing at the grid limit, and the result is huge deliberate imbalance billed at reBAP. The speculation check misses it because it only rejects strict inequalities.",
+    "failure_scenario": "I reproduced this with the real-like DA curve from tests/test_real_prices.py and the default Config. solve_commitment(..., prices=gate_view(da)) returns schedule = -3 MW (export at export_max) in all 24 hours, whether the PV scenario is 0x, 0.5x or 1x the actual. That includes night hours with zero PV. The oracle and point policies produce identical schedules and identical costs for forecasts of 0, 0.6 and 1.0 times actual, so regret is always 0. With settle_prices=single_price(da, da+noise) the oracle's imbalance cost is 3563 EUR, all of it from deliberate short positions. Under gate_view, evaluate_commitment gives the same cost (600.437) for schedules of 0, -3 and +2 MW, but billing at reBAP gives -86.6, 570.8 and 1009.1. With dual_price settlement the oracle builds up 79.7 MWh of short energy and costs 4769 EUR. The battery also gets no incentive to reduce deviations during settlement. As a result, every DFL comparison run with gate_view + settle_prices measures solver tie-breaking, not forecast quality. test_every_policy_solves_with_negative_real_prices passes only because it checks that the cost is finite.",
+    "fix": "Do not model E[reBAP] as exactly DA at commitment. Give imbalance a strictly positive expected cost on top of DA: either a spread/risk premium estimated from past reBAP-DA data available at the gate (e.g. dual_price(da, k_short, k_long) with k>0), or a small tie-breaking penalty on up+dn. Make speculation_hours also reject the zero-margin case (short+long <= 0, short <= export) unless explicitly allowed. Add a test asserting that gate_view commitments change with the PV scenario and stay within the scenario envelope.",
+    "v": {
+     "id": "leak-1",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reason": "Reproduced. Under gate_view, import=export=short=DA and long=-DA, so every commitment g has the same planned cost DA*(net need). HiGHS commits -3 MW (export_max) in all 24 hours whether the PV scenario is 0x, 0.5x or 1x. Through run_policy, the oracle and point policies give identical schedules and identical costs (126.9) for forecasts of 0, 0.6 and 1.0x, with 79.7 MWh of deliberate short energy. Constant schedules of 0, -3 and +2 MW all evaluate to 546.9 under gate_view, but to 452.7, -87.3 and 812.7 when billed at the test's imbalance price. speculation_hours uses strict inequalities, so it accepts the zero-margin case. The forecast therefore has no effect on the commitment, and regret measures solver tie-breaking."
+    }
+   },
+   {
+    "id": "leak-2",
+    "file": "src/riskaware_pv/decision/dispatch.py",
+    "line": 83,
+    "severity": "high",
+    "summary": "gate_view commits with the realised DE-LU day-ahead price for the delivery day. That price clears about 12:42 CET, after the 12:00 gate, so the battery schedule is optimised with perfect price foresight. This is a leak, not something that is merely 'known around the gate'.",
+    "failure_scenario": "Bids for day D+1 close at 12:00 CET on D, and the EPEX/SDAC results are published around 12:42-12:57 CET. The commitment LP couples hours through battery SOC. It charges in the negative-price midday hours and discharges into the evening peak, using exact hourly prices for all 24 hours. Independent hourly price-quantity bid curves cannot implement that schedule, so the arbitrage value is unattainable. Every policy, the oracle included, gets this price foresight. Absolute costs, battery value and any result that depends on price-shape interaction (CVaR or stochastic vs point) are therefore inflated, and the comparison is not an operational one.",
+    "fix": "Use a two-price protocol. Commit volumes at the gate using a price forecast built only from information available at 12:00 CET on D (e.g. gated features or a model on D and earlier prices; D's own prices are known since D-1). Settle the committed volumes at the realised DA price and the deviations at realised reBAP. If the thesis wants to model price-contingent bidding, state explicitly that it assumes per-hour bid curves, and drop or restrict the intertemporal battery arbitrage at the DA stage (move it to an intraday re-optimisation after clearing). Rewrite the gate_view docstring accordingly.",
+    "v": {
+     "id": "leak-2",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "gate_view takes the delivery day's realised DA vector, and the docstring claims the DA price is 'known (it clears around the gate)'. SDAC gate closure is 12:00 CET and results come later, so the intertemporal battery LP is optimised with perfect hourly price foresight. Hourly bid curves cannot reproduce that. Every policy, the oracle included, gets this foresight, which inflates absolute costs and battery value. It is a real protocol defect, though it is a modelling choice rather than a code crash."
+    }
+   },
+   {
+    "id": "leak-3",
+    "file": "src/riskaware_pv/data/features.py",
+    "line": 31,
+    "severity": "medium",
+    "summary": "The gate is set at 12:00 UTC, and _gated_shift and _rolling_at_origin count the hour stamped exactly at the origin as available. SMARD timestamps mark the start of the interval, so features read PV and load 2-3 hours after the real 12:00 CET/CEST gate.",
+    "failure_scenario": "forecast_origin gives D 12:00 UTC (configs/default.yaml documents gate_hour 12 as UTC). y_at_origin = y[D 12:00 UTC], which smard.parse_smard_series documents as the average over 12:00-13:00 UTC. That value is only complete at 14:00 CET in winter and 15:00 CEST in summer, while the German DA gate is 12:00 local (11:00 or 10:00 UTC). The same applies to k_recent6, the k/y/load roll windows ending at the origin, and the gated lags for target hours 12:00 UTC with hour_offset +1/+2. SMARD also publishes realised generation with a delay. tests/test_no_leakage.py only poisons values strictly after the cutoff (index > cutoff), so it accepts this. On the real German protocol the model sees the early-afternoon PV of the gate day, the most informative near-gate cloud signal, so the reported skill is not achievable.",
+    "fix": "Define the gate in Europe/Berlin local time (12:00), convert to UTC per day, and require every input interval to end at or before the gate, minus a publication latency for SMARD actuals (e.g. use values with interval_end <= gate - latency). Change the poisoning test to poison every interval whose end is after the gate.",
+    "v": {
+     "id": "leak-3",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "forecast_origin returns D 12:00 UTC (default.yaml documents gate_hour 12 as UTC). _gated_shift asserts wanted <= origin, and _rolling_at_origin is inclusive, so for target D+1 12:00 the lag reads y[D 12:00 UTC]. parse_smard_series documents that stamp as the start of the 12:00-13:00 UTC interval, which ends at 14:00 CET or 15:00 CEST. The German DA gate is 12:00 local (11:00 or 10:00 UTC). features.py itself is unchanged, but the new SMARD loader now feeds it German data under the German protocol. The no-leakage test only poisons values after the origin stamp, so it does not catch this."
+    }
+   },
+   {
+    "id": "leak-4",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 592,
+    "severity": "medium",
+    "summary": "Delivery days are UTC calendar days, but the DE-LU DA auction delivers CET/CEST days. A UTC day's real-price vector therefore includes 1-2 hours priced in the next day's auction, which clears a full day after the commitment gate.",
+    "failure_scenario": "The panel and the e2 day grouping (preds.index.normalize()) use UTC days 00:00-23:00. In summer, UTC 22:00 and 23:00 on D+1 are 00:00 and 01:00 CEST on D+2, which the D+1 auction prices at about 12:42 on D+1. Feeding that UTC day's SMARD price_eur_mwh into gate_view/single_price at the D 12:00 gate therefore uses prices published about 24.7 hours after the gate. In winter it is one hour (UTC 23:00). The CET hours 00:00-01:00 of D+1 meanwhile fall into the previous UTC day. This happens even if leak-2 is fixed by moving to a 13:00 commitment.",
+    "fix": "Group delivery days by Europe/Berlin calendar date (23, 24 or 25 hours at DST changes, or pad/drop those days explicitly), and take each day's DA price vector from the single auction that clears on D. Build day_inputs['hours'] from local hours as well.",
+    "v": {
+     "id": "leak-4",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reason": "The panel is a UTC clock, and e2_dispatch groups delivery days with preds.index.normalize() on UTC. In summer, UTC 22:00 and 23:00 of D+1 are 00:00 and 01:00 CEST of D+2, which a later auction prices. Real-price vectors cut per UTC day therefore mix two auctions and include prices published about a day after the gate. The cited line numbers (592) do not exist (smard.py has 232 lines), but the substance holds."
+    }
+   },
+   {
+    "id": "leak-5",
+    "file": "src/riskaware_pv/data/imbalance.py",
+    "line": 164,
+    "severity": "low",
+    "summary": "load_rebap_hourly says the hourly mean of quarter-hour reBAP is 'exact' for an hourly schedule, and only the 'unterdeckt' column feeds both sides. Both understate imbalance cost when deviations and prices covary within the hour.",
+    "failure_scenario": "PV ramps within the hour (e.g. a 10:00 UTC morning ramp), so the deviation from a flat hourly schedule changes sign across the four quarter hours. The true settlement sum_q dev_q*reBAP_q differs from mean(reBAP)*sum_q dev_q whenever dev_q and reBAP_q are correlated, which is the system-wide case since PV forecast errors drive the German imbalance. Separately, in quarter hours where the capacity reserve was activated, 'ueberdeckt' differs from 'unterdeckt', yet single_price uses -short as the long price, so long energy in those hours is paid at the wrong price.",
+    "fix": "Remove the 'exact' claim and document the approximation. Better: settle at quarter-hour resolution with interpolated or quarter-hour PV. Pass the long column separately into DayPrices (long_price = -rebap_long).",
+    "v": {
+     "id": "leak-5",
+     "verdict": "refuted",
+     "reason": "The docstring's 'exact' claim is explicitly conditioned on a deviation that is constant within the hour. That condition holds for the hourly model, which settles against hourly SMARD generation. In-hour covariance is a known resolution limit that the docstring already defers to quarter-hour settlement, not a code defect. The claim that ueberdeckt differs from unterdeckt could not be reproduced: no reBAP data exists locally (data/raw/rebap is missing), and the finding gives no evidence of how often or how much the two columns differ."
+    }
+   },
+   {
+    "id": "leak-6",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 583,
+    "severity": "low",
+    "summary": "build_de_panel returns the cached parquet whenever its date range covers the request. A panel built before any reBAP data existed keeps an all-NaN imbalance_price_eur_mwh column after the reBAP CSVs or credentials are added.",
+    "failure_scenario": "The current data/interim/smard_de_panel.parquet has imbalance_price_eur_mwh 100% NaN (no reBAP was available, so the FileNotFoundError was swallowed). After the user drops reBAP CSVs into data/raw/rebap and calls load_site_series_smard(), the cached panel is returned unchanged. Every settle day then fails in DayPrices with 'contains NaN', or the user filters out the 'missing' days and silently evaluates on none or only a few. The loud NaN check prevents wrong numbers, but the reBAP data never reaches evaluation without force=True.",
+    "fix": "Invalidate the cache when the imbalance column is all-NaN but reBAP files or credentials now exist, or load reBAP at evaluation time instead of baking it into the cached panel. Log a warning when the FileNotFoundError is swallowed.",
+    "v": {
+     "id": "leak-6",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reason": "Verified that the cached data/interim/smard_de_panel.parquet has imbalance_price_eur_mwh 100% NaN and covers the default window. build_de_panel returns the cached panel whenever its date range covers the request, without checking that column. load_site_series_smard() calls it without force, so reBAP CSVs or credentials added later never reach the panel. The FileNotFoundError is swallowed without a warning."
+    }
+   },
+   {
+    "id": "leak-7",
+    "file": "src/riskaware_pv/data/smard.py",
+    "line": 597,
+    "severity": "low",
+    "summary": "Normalising by capacity is acceptable for leakage because capacity_mw is excluded from features and carries no weather information. However, the monthly Energy-Charts value is hindsight-revised (MaStR late registrations) and is forward-filled from the first of the month, which creates month-boundary steps in the CF target and gives MW-level comparisons a hindsight denominator.",
+    "failure_scenario": "In 2023-2024 the DC capacity grew about 1.2-1.5 GW per month on 70-90 GW. In 2026 the cached series rises from 129.8 to 131.2 GW (Oct to Nov) and reports a partial-month 133.0 GW for the current month. Each value is applied from 00:00 UTC on the 1st, so the target CF steps down by about 1.5% at every month boundary while the y_sameh_d* lags of the previous days use the old denominator. That is a systematic artefact that e3's drift detectors and residual-by-regime analyses can pick up. If model CF is multiplied back by capacity_mw to benchmark against solar_forecast_tso_mw (which the TSO produced with real-time capacity knowledge), the model gets a revised denominator the TSO never had.",
+    "fix": "Interpolate capacity linearly between monthly points (or use the as-of-gate value lagged by publication delay) and record the download vintage. For the TSO benchmark, compare in CF space using the same denominator for both forecasts, or use capacity known at the gate.",
+    "v": {
+     "id": "leak-7",
+     "verdict": "refuted",
+     "reason": "capacity_mw is not a feature, and the steps at month boundaries are about 1% (e.g. 129.8 to 131.2 GW, 131.2 to 132.8 GW). That is small next to day-ahead PV forecast error, and CS1's OPSD capacity normalisation used the same convention. The specific claims do not match the data: the panel ends 2026-10-31 at 132.8 GW, with no Nov or 'current partial month' values in use. No concrete wrong result or meaningful leakage is shown, so this is a design refinement rather than a real defect. The misstated line number (597 in a 232-line file) also does not exist."
+    }
+   }
+  ]
+ }
+]

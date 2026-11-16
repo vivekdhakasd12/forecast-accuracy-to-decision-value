@@ -34,3 +34,9 @@ presentation/colab_bundle.zip
 
 # LinkedIn drafts (kept local)
 docs/thesis/linkedin/
+
+# private API keys (never publish)
+.env
+
+# downloaded source data (SMARD, Energy-Charts, reBAP): rebuilt by `make data-de`
+data/raw/*/

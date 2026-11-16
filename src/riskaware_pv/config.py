@@ -78,6 +78,11 @@ class BatteryConfig:
     # rescaled to this nameplate.
     pv_nameplate_mw: float = 2.0
     load_peak_mw: float = 1.2
+    # Grid connection limits.  None derives them from load, PV and battery
+    # power (see dispatch.grid_limits); they never bind under the Case Study 1
+    # tariff and exist so that negative real prices cannot make the LP unbounded.
+    grid_import_max_mw: float | None = None
+    grid_export_max_mw: float | None = None
 
 
 @dataclass

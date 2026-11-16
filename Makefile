@@ -1,11 +1,12 @@
 PY := .venv/bin/python
 export PYTHONPATH := src
 
-.PHONY: help setup data test e1 e2 e3 e4 all clean
+.PHONY: help setup data data-de test e1 e2 e3 e4 e5 all clean
 
 help:
 	@echo "make setup   - create .venv and install dependencies"
 	@echo "make data    - download OPSD and build the design matrix"
+	@echo "make data-de - thesis data: German PV, load, day-ahead price (SMARD) + reBAP if available"
 	@echo "make test    - run the test suite (leakage + dispatch properties)"
 	@echo "make e1      - experiment 1: probabilistic forecasting"
 	@echo "make e2      - experiment 2: risk-aware dispatch"
@@ -23,6 +24,9 @@ data:
 	$(PY) -c "from riskaware_pv.pipeline import load_design_matrix; \
 	from riskaware_pv.config import Config; \
 	X = load_design_matrix(Config.load(), force=True); print(X.shape)"
+
+data-de:
+	$(PY) -m riskaware_pv.data.smard --force
 
 test:
 	$(PY) -m pytest tests -q

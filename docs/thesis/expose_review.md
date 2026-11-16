@@ -4,6 +4,8 @@ Date: 2026-11-16 (thesis week 7 of 24). Scope: the exposé (`docs/Expose_Master'
 
 How this was produced: six independent review lenses (claims vs evidence, DFL technical fit, literature, data, research design, codebase readiness). A separate verifier re-checked each lens's findings and tried to refute them. 63 findings were raised; none was refuted outright, about a third were downgraded or corrected, and the severities below are the verified ones. The raw findings with verdicts are in `expose_review_findings.json`. Literature entries marked "verify" were found by web search but not fully confirmed.
 
+> **Update, 16 Nov 2026:** the scope stays exactly as in the approved exposé. Where this review suggests dropping or moving items (SPO+, the differentiable layer, drift, transfer, multi-zone), ignore that and use the full-scope plan in [THESIS_IN_PLAIN_WORDS.md](THESIS_IN_PLAIN_WORDS.md), sections 7 and 8. The technical and quality findings still apply.
+
 ## Verdict in brief
 
 The thesis is sound and still feasible. The research question (how much of the gap to perfect foresight a decision-trained model closes, and what it gives up in calibration) is legitimate. The CS1 codebase is a strong, tested base for it: leakage-audited features, a two-stage HiGHS LP, and an oracle-based regret. As written, though, the exposé is not ready to execute. Three things matter most:

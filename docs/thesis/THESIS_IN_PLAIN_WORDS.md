@@ -63,37 +63,53 @@ That gives the thesis a clear, testable story: **DFL only pays off when storage 
 
 If DFL turns out not to beat the shortcut, that is still a valid result: "for this market, the simple trick is enough."
 
-## 7. The simple version of the plan
+## 7. The plan: everything in the exposé, each part kept as small as it can be
 
-Keep it small. Germany only, solar only.
+The scope is the approved exposé. Nothing gets dropped. What keeps it manageable is
+doing every item in its **simplest acceptable form**, and noticing that Case Study 1
+already contains the code for half of it.
 
-| Step | What | In plain words |
+| Exposé item | Simplest acceptable version | Reuses Case Study 1? |
 |---|---|---|
-| A | **Baseline 1: normal forecast** | Case Study 1's best model (ridge regression), promise = best guess |
-| B | **Baseline 2: smart shortcut** | Same model, trained to predict the "a bit less" level (quantile) |
-| C | **Money-trained model** | Train directly on the euro cost, including the battery |
-| D | **Compare** | Across a few battery sizes and penalty levels, on many test days, with proper statistics |
-| E | **Honesty check** | Is the money-trained model still well calibrated? Can a conformal correction fix it? |
-| F | **Bonus (only if time)** | Real German market prices, other countries, the fancy "differentiable layer" method |
+| Real prices (Obj. 3) | Germany: real day-ahead price (ENTSO-E) + real imbalance price (reBAP). Other zones keep the synthetic tariff, which Sec. 5 of the exposé already allows, and the limitation is reported. | Partly (data layer) |
+| Several zones (Obj. 4) | Germany plus two zones already in the data (e.g. Denmark, Switzerland) | Yes (`transfer.py`, multi-zone loader) |
+| Penalty x storage grid (Obj. 4) | A small grid: 3 penalty levels x 3 battery sizes | Yes (`e2 --sensitivity`) |
+| Baselines | Ridge point forecast, ridge quantile + conformal, perfect-foresight oracle | Yes |
+| DFL method 1: cost-weighted quantile loss | Pinball loss at the cost-optimal level, weighted by what each hour's mistake costs | New, but easy |
+| DFL method 2: SPO+ | Implemented in the form that fits this problem. The textbook SPO+ assumes the forecast is a *price*, and here it is *solar output*. Finding and testing the right adaptation is part of answering sub-question 2. If it only works partly, that is a reportable result. | New |
+| DFL method 3: differentiable layer (Obj. 1) | The dispatch LP rebuilt in `cvxpylayers` with a small smoothing term, a single scenario (deterministic version) and a small model. Time-boxed to two weeks. | New |
+| Calibration audit + conformal on top (Obj. 5) | Reuse the conformal and adaptive conformal code on the decision-trained models | Yes (`models/conformal.py`) |
+| Drift (sub-question 4) | Rerun the Case Study 1 drift experiment with a decision-trained model | Yes (`drift/`, `e3`) |
+| Transfer (sub-question 5) | Rerun the Case Study 1 transfer experiment with a decision-trained model | Yes (`transfer.py`, `e5`) |
+| Reproducible release (Obj. 6) | GitHub repo, tests, `make all` | Already done |
 
-What gets dropped or made optional compared to the exposé:
+Quality fixes from the review still apply. These don't change the scope, they make the results hold up:
 
-- **SPO+:** it does not fit this problem, because the solar forecast is not a price.
-- **The differentiable optimisation layer:** complicated and fragile. Bonus only.
-- **Drift and other countries:** bonus only.
-
-These cuts need a short email to Prof. Jalali. A narrower scope is normal, but it should be agreed in writing.
+- **Dispatch model:** the dispatch LP must survive real prices (bounds on every variable, no silently dropped days).
+- **Statistics:** compare on every test day, use a few random seeds, and use a paired significance test.
+- **Exposé wording:** don't overstate the Case Study 1 numbers when they are reused in the thesis text.
 
 ## 8. Timeline (today is week 7 of 24)
 
-| Weeks | Do |
-|---|---|
-| 7-8 | Git and GitHub set up. Email the supervisor about the simpler scope. Fix the small dispatch-model issues found in the review. |
-| 9-10 | Baselines A and B, with proper statistics (many test days, several random seeds) |
-| 11-14 | Money-trained model C (start with a linear model, which is the simplest) |
-| 15-17 | Comparison D and honesty check E |
-| 18-19 | Bonus F, or buffer if things are late |
-| 20-24 | Write, revise, submit, prepare the defence |
+Weeks 1 to 6 of the exposé plan slipped, so the remaining work is compressed. The order stays the same as the exposé.
+
+| Weeks | Do | Done when |
+|---|---|---|
+| 7-8 | Data: ENTSO-E prices + reBAP for Germany. Make the dispatch LP safe for real prices. | Price data loaded, tests pass |
+| 9 | Re-run the two-stage baselines on the new data (all zones, all test days) | Baseline results table |
+| 10-11 | DFL 1: cost-weighted quantile loss | First DFL vs baseline comparison |
+| 12-13 | DFL 2: SPO+ (adapted) | SPO+ results, or a documented reason it falls short |
+| 14-15 | DFL 3: differentiable layer (time-boxed) | End-to-end model results |
+| 16 | Calibration audit + conformal on top of the DFL models | Cost vs honesty trade-off table |
+| 17 | Drift + transfer reruns with the best DFL model | Robustness and portability results |
+| 18 | Penalty x storage grid + statistics on everything | Final results |
+| 19 | Buffer (something will be late) | |
+| 20-24 | Write, revise, submit, prepare the defence | Submitted thesis |
+
+The rule that protects the thesis is the one the exposé already states: each phase produces a
+result on its own. If the differentiable layer misbehaves in weeks 14-15, stop on time, report
+what happened, and move on. A documented "this was unstable, here is why" still answers the
+question.
 
 ## 9. Words you will hear (cheat sheet)
 

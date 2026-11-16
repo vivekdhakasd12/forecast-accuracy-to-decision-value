@@ -44,14 +44,26 @@ class SiteConfig:
 class ForecastConfig:
     """Day-ahead protocol.
 
-    At ``gate_hour`` (local/UTC) on day D we must submit a forecast for all 24
-    hours of day D+1.  Horizons therefore run from ``gate_hour`` + 1 up to
-    ``gate_hour`` + 24 hours, and *no* feature may use an observation newer
-    than the gate.  This mirrors European day-ahead market closure.
+    At ``gate_hour`` on day D (clock time in ``timezone``) we must submit a
+    forecast for every hour of delivery day D+1, a calendar day in the same
+    ``timezone``.  No feature may use an observation that is not complete by
+    the gate.
+
+    ``timezone``
+        ``"UTC"`` reproduces Case Study 1: gate at 12:00 UTC, 24-hour UTC days.
+        ``"Europe/Berlin"`` is the real German market: gate at 12:00 German
+        time, delivery days of 23, 24 or 25 hours around the clock changes.
+    ``availability_lag_hours``
+        How long after its timestamp an observation becomes usable.  SMARD and
+        OPSD stamp each hour with its *start*, so the value stamped 11:00 covers
+        11:00-12:00 and is complete at 12:00: a lag of 1.  Case Study 1 used 0,
+        which let the hour that starts at the gate count as known.
     """
 
     gate_hour: int = 12
-    horizon: int = 24
+    horizon: int = 24              # hours in a normal delivery day
+    timezone: str = "UTC"
+    availability_lag_hours: int = 0
     quantiles: Sequence[float] = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
     target: str = "solar"          # "solar" | "wind" | "net_load"
     lags_hours: Sequence[int] = (24, 25, 26, 48, 72, 168, 336)

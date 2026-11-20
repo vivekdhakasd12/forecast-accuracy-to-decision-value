@@ -101,6 +101,11 @@ class BatteryConfig:
     # tariff and exist so that negative real prices cannot make the LP unbounded.
     grid_import_max_mw: float | None = None
     grid_export_max_mw: float | None = None
+    # Let the PV plant switch off part of its output (curtailment).  Off for
+    # Case Study 1, whose tariff charged 90 EUR/MWh for long energy, so free
+    # curtailment would have changed its published numbers.  On for the thesis,
+    # where real negative prices make switching off the rational choice.
+    allow_curtailment: bool = False
 
 
 @dataclass

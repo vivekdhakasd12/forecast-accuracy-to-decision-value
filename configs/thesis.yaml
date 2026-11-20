@@ -37,6 +37,7 @@ battery:
   soc_max: 0.95
   pv_nameplate_mw: 2.0
   load_peak_mw: 1.2
+  allow_curtailment: true   # switch PV off when prices go negative
 
 market:
   import_price_peak: 220.0

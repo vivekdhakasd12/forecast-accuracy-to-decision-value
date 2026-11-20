@@ -46,6 +46,7 @@ class DispatchResult:
     imbalance_down: np.ndarray | None = None
     scenario_costs: np.ndarray | None = None
     var: float | None = None
+    curtailed: np.ndarray | None = None   # MWh thrown away, per scenario and hour
 
     @property
     def feasible(self) -> bool:
@@ -233,6 +234,44 @@ def _battery_bounds(bat: BatteryConfig, T: int, S: int, v: _Vars,
     return bounds
 
 
+# Tiny cost per curtailed MWh: when spilling and curtailing cost exactly the
+# same, prefer to keep producing.  Small enough never to change a real choice.
+_CURTAIL_TIEBREAK = 1e-6
+
+
+def _add_curtailment(A_eq, A_ub, bounds, c, S: int, T: int, pv: np.ndarray,
+                     cap: np.ndarray | None = None):
+    """Append a curtailment variable k[s, t] in [0, pv[s, t]] to an LP.
+
+    It enters each scenario's energy balance as ``pv - k``, i.e. the plant may
+    throw away part of its own output.  A German PV plant in direct marketing
+    does exactly that when prices go negative (no market premium is paid then,
+    EEG section 51), so without this option every negative-price hour would
+    force the model to pay for disposing of energy it could simply not produce.
+    ``cap`` (shape ``(S, T)``) lowers the upper bound below ``pv``.  Settlement
+    uses it so the plant can only throw away a *surplus*: switching off to
+    create a shortfall would be deliberate imbalance, which pays at negative
+    prices and is not allowed.
+    The new columns go *after* all existing ones, so no other index moves.
+    Balance rows are the first ``S * T`` rows of ``A_eq``, ordered (s, t).
+    """
+    n_old = A_eq.shape[1]
+    rows = np.arange(S * T)
+    K = sparse.coo_matrix((-np.ones(S * T), (rows, np.arange(S * T))),
+                          shape=(A_eq.shape[0], S * T))
+    A_eq = sparse.hstack([A_eq, K]).tocsr()
+    if A_ub is not None:
+        A_ub = sparse.hstack([A_ub, sparse.csr_matrix((A_ub.shape[0], S * T))]).tocsr()
+    upper = np.clip(np.atleast_2d(pv), 0.0, None)
+    if cap is not None:
+        upper = np.minimum(upper, np.clip(np.atleast_2d(cap), 0.0, None))
+    bounds = list(bounds) + [(0.0, float(upper[s, t]))
+                             for s in range(S) for t in range(T)]
+    c = np.concatenate([c, np.full(S * T, _CURTAIL_TIEBREAK)])
+    idx = np.arange(n_old, n_old + S * T).reshape(S, T)
+    return A_eq, A_ub, bounds, c, idx
+
+
 def _core_constraints(T, S, pv, load, bat, v, i_c, i_d, i_soc, i_up, i_dn, i_gp, i_gm,
                       n_cols, fixed_schedule: np.ndarray | None):
     """Energy balance + state-of-charge dynamics for every scenario."""
@@ -353,6 +392,10 @@ def solve_commitment(
         c[i_eta] = cvar_weight
         c[i_z] = cvar_weight * w / (1.0 - alpha)
 
+    i_k = None
+    if battery.allow_curtailment:
+        A_eq, A_ub, bounds, c, i_k = _add_curtailment(A_eq, A_ub, bounds, c, S, T,
+                                                      pv_scenarios)
     res = linprog(c, A_ub=A_ub, b_ub=b_ub_arr, A_eq=A_eq, b_eq=b_eq,
                   bounds=bounds, method="highs")
     if not res.success:
@@ -363,11 +406,16 @@ def solve_commitment(
     gp, gm = x[i_gp], x[i_gm]
     up, dn = x[i_up], x[i_dn]
     scen_cost = (up * pr.short_price + dn * pr.long_price).sum(1)
+    objective = float(res.fun)
+    curtailed = None
+    if i_k is not None:
+        curtailed = x[i_k]
+        objective -= _CURTAIL_TIEBREAK * float(curtailed.sum())
     return DispatchResult(
-        status="optimal", objective=float(res.fun), schedule=gp - gm,
+        status="optimal", objective=objective, schedule=gp - gm,
         import_mwh=gp, export_mwh=gm, charge=x[i_c], discharge=x[i_d], soc=x[i_soc],
         imbalance_up=up, imbalance_down=dn, scenario_costs=scen_cost,
-        var=float(x[i_eta]) if use_cvar else None,
+        var=float(x[i_eta]) if use_cvar else None, curtailed=curtailed,
     )
 
 
@@ -428,6 +476,14 @@ def evaluate_commitment(
     c = np.zeros(n_cols)
     c[i_up[0, :]] = pr.short_price
     c[i_dn[0, :]] = pr.long_price
+    i_k = None
+    if battery.allow_curtailment:
+        # PV needed to meet the promise is load - schedule; only output above
+        # that may be switched off (ignoring the battery keeps this simple and
+        # on the safe side: it can only make curtailment rarer).
+        surplus = pv - (np.asarray(load, dtype=float) - schedule)[None, :]
+        A_eq, A_ub, bounds, c, i_k = _add_curtailment(A_eq, A_ub, bounds, c, S, T, pv,
+                                                      cap=surplus)
     res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds,
                   method="highs")
 
@@ -439,8 +495,11 @@ def evaluate_commitment(
                 "energy_short_mwh": np.nan, "energy_long_mwh": np.nan}
     x = res.x
     up, dn = x[i_up[0, :]], x[i_dn[0, :]]
+    curtailed = x[i_k[0, :]] if i_k is not None else np.zeros(T)
     if settle_prices is None:
         imbalance_cost = float(res.fun)
+        if i_k is not None:
+            imbalance_cost -= _CURTAIL_TIEBREAK * float(curtailed.sum())
     else:
         settle_prices.check(T)
         imbalance_cost = float(np.sum(up * settle_prices.short_price
@@ -452,6 +511,7 @@ def evaluate_commitment(
         "total_cost": day_ahead_cost + imbalance_cost,
         "energy_short_mwh": float(up.sum()),
         "energy_long_mwh": float(dn.sum()),
+        "curtailed_mwh": float(curtailed.sum()),
         "soc": x[i_soc[0, :]],
         "charge": x[i_c[0, :]],
         "discharge": x[i_d[0, :]],
